@@ -7,23 +7,29 @@ import { ExportDialog } from "./ExportDialog";
 import { ResizableResultsTable } from "./ResizableResultsTable";
 
 export function QueryEditor() {
-  const { lastSql, setLastSql, lastResult, setLastResult, refreshHistory } =
+  const { queryTabs, activeQueryTabId, updateQueryTab, refreshHistory } =
     useAppState();
   const [running, setRunning] = useState(false);
-  const [queryError, setQueryError] = useState<string | null>(null);
   const [showExport, setShowExport] = useState(false);
 
+  const tab = queryTabs.find((t) => t.id === activeQueryTabId);
+  if (!tab) return null;
+
+  const tabId = tab.id;
+  const sql = tab.sql;
+  const result = tab.result;
+  const queryError = tab.error;
+
   async function handleRun() {
-    if (!lastSql.trim()) return;
+    if (!sql.trim()) return;
     setRunning(true);
-    setQueryError(null);
+    updateQueryTab(tabId, { error: null });
     try {
-      const result = await executeQuery(lastSql);
-      setLastResult(result);
+      const result = await executeQuery(sql);
+      updateQueryTab(tabId, { result });
       await refreshHistory();
     } catch (e) {
-      setQueryError(String(e));
-      setLastResult(null);
+      updateQueryTab(tabId, { error: String(e), result: null });
     } finally {
       setRunning(false);
     }
@@ -41,8 +47,8 @@ export function QueryEditor() {
       {/* SQL Editor */}
       <div className="p-3 border-b space-y-2">
         <Textarea
-          value={lastSql}
-          onChange={(e) => setLastSql(e.target.value)}
+          value={sql}
+          onChange={(e) => updateQueryTab(tabId, { sql: e.target.value })}
           onKeyDown={handleKeyDown}
           placeholder="SELECT * FROM your_table LIMIT 100"
           className="font-mono text-sm min-h-[100px] resize-y"
@@ -50,10 +56,10 @@ export function QueryEditor() {
         />
         <div className="flex items-center justify-between">
           <div className="flex gap-2">
-            <Button onClick={handleRun} disabled={running || !lastSql.trim()} size="sm">
+            <Button onClick={handleRun} disabled={running || !sql.trim()} size="sm">
               {running ? "Running..." : "▶ Run"}
             </Button>
-            {lastResult && (
+            {result && (
               <Button
                 variant="outline"
                 size="sm"
@@ -75,19 +81,19 @@ export function QueryEditor() {
       )}
 
       {/* Results */}
-      {lastResult && (
+      {result && (
         <div className="flex-1 min-h-0 flex flex-col">
           <div className="px-3 py-2 text-xs text-muted-foreground border-b">
-            {lastResult.row_count} row{lastResult.row_count !== 1 ? "s" : ""} •{" "}
-            {lastResult.execution_time_ms}ms
+            {result.row_count} row{result.row_count !== 1 ? "s" : ""} •{" "}
+            {result.execution_time_ms}ms
           </div>
           <div className="flex-1 min-h-0 overflow-auto">
-            <ResizableResultsTable result={lastResult} />
+            <ResizableResultsTable result={result} />
           </div>
         </div>
       )}
 
-      {!lastResult && !queryError && (
+      {!result && !queryError && (
         <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
           Write a query and press Run to see results
         </div>
@@ -97,7 +103,7 @@ export function QueryEditor() {
       <ExportDialog
         open={showExport}
         onClose={() => setShowExport(false)}
-        sql={lastSql}
+        sql={sql}
       />
     </div>
   );

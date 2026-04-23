@@ -2,6 +2,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AppProvider, useAppState } from "@/hooks/useAppState";
 import { Sidebar } from "@/components/Sidebar";
 import { QueryEditor } from "@/components/QueryEditor";
+import { QueryTabBar } from "@/components/QueryTabBar";
 import { HistoryPanel } from "@/components/HistoryPanel";
 import "./App.css";
 
@@ -35,8 +36,11 @@ function AppContent() {
               History
             </TabsTrigger>
           </TabsList>
-          <TabsContent value="query" className="flex-1 min-h-0 mt-0">
-            <QueryEditor />
+          <TabsContent value="query" className="flex-1 min-h-0 mt-0 flex flex-col">
+            <QueryTabBar />
+            <div className="flex-1 min-h-0">
+              <QueryEditor />
+            </div>
           </TabsContent>
           <TabsContent value="history" className="flex-1 min-h-0 mt-0">
             <HistoryPanel />
