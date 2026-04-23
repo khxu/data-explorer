@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback } from "react";
+import { useRef, useEffect, useCallback, useState } from "react";
 import { EditorView, keymap, placeholder as phPlugin } from "@codemirror/view";
 import { EditorState } from "@codemirror/state";
 import { sql, PostgreSQL } from "@codemirror/lang-sql";
@@ -73,8 +73,7 @@ export function SqlEditor({
       EditorView.theme({
         "&": {
           fontSize: "13px",
-          minHeight: "100px",
-          maxHeight: "300px",
+          height: "100%",
           border: "1px solid hsl(var(--border))",
           borderRadius: "var(--radius)",
         },
@@ -133,5 +132,41 @@ export function SqlEditor({
     }
   }, [value]);
 
-  return <div ref={containerRef} className={className} />;
+  const [height, setHeight] = useState(150);
+  const resizing = useRef(false);
+
+  const handleResizeDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    resizing.current = true;
+    const startY = e.clientY;
+    const startH = height;
+
+    const onMove = (ev: MouseEvent) => {
+      if (!resizing.current) return;
+      setHeight(Math.max(80, Math.min(startH + ev.clientY - startY, 600)));
+    };
+    const onUp = () => {
+      resizing.current = false;
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+    document.body.style.cursor = "row-resize";
+    document.body.style.userSelect = "none";
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }, [height]);
+
+  return (
+    <div className={className}>
+      <div style={{ height }} className="overflow-hidden">
+        <div ref={containerRef} className="h-full" />
+      </div>
+      <div
+        className="h-1.5 cursor-row-resize bg-border/50 hover:bg-primary/30 active:bg-primary/50 transition-colors rounded-b"
+        onMouseDown={handleResizeDown}
+      />
+    </div>
+  );
 }
