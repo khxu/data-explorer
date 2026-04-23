@@ -153,7 +153,7 @@ export function Sidebar() {
           <Button
             variant="ghost"
             size="sm"
-            className="h-6 text-xs"
+            className="h-6 text-base"
             onClick={() => setShowTagManager(true)}
           >
             ⚙

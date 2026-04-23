@@ -180,6 +180,23 @@ pub fn execute_query(
 }
 
 #[tauri::command]
+pub fn clear_query_history(
+    db: State<Database>,
+    before: Option<String>,
+) -> Result<u64, AppError> {
+    let conn = db.conn.lock().unwrap();
+    let affected = if let Some(before_date) = before {
+        conn.execute(
+            "DELETE FROM query_history WHERE created_at < ?1",
+            rusqlite::params![before_date],
+        )?
+    } else {
+        conn.execute("DELETE FROM query_history", [])?
+    };
+    Ok(affected as u64)
+}
+
+#[tauri::command]
 pub fn get_query_history(
     db: State<Database>,
     limit: Option<i64>,

@@ -145,6 +145,10 @@ export async function getQueryHistory(
   });
 }
 
+export async function clearQueryHistory(before?: string): Promise<number> {
+  return invoke("clear_query_history", { before: before ?? null });
+}
+
 // -- Export --
 
 export async function exportResults(

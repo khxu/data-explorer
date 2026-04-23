@@ -67,6 +67,7 @@ pub fn run() {
             list_projects,
             execute_query,
             get_query_history,
+            clear_query_history,
             export_results,
         ])
         .run(tauri::generate_context!())
