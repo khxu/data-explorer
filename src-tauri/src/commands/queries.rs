@@ -223,3 +223,54 @@ pub fn get_query_history(
     })?;
     Ok(rows.collect::<Result<Vec<_>, _>>()?)
 }
+
+// -- Query Tab Persistence --
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SavedQueryTab {
+    pub id: String,
+    pub name: String,
+    pub sql_text: String,
+    pub sort_order: i64,
+    pub is_active: bool,
+}
+
+#[tauri::command]
+pub fn load_query_tabs(db: State<Database>) -> Result<Vec<SavedQueryTab>, AppError> {
+    let conn = db.conn.lock().unwrap();
+    let mut stmt = conn.prepare(
+        "SELECT id, name, sql_text, sort_order, is_active FROM query_tabs ORDER BY sort_order",
+    )?;
+    let rows = stmt.query_map([], |row| {
+        Ok(SavedQueryTab {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            sql_text: row.get(2)?,
+            sort_order: row.get(3)?,
+            is_active: row.get::<_, i64>(4)? != 0,
+        })
+    })?;
+    Ok(rows.collect::<Result<Vec<_>, _>>()?)
+}
+
+#[tauri::command]
+pub fn save_query_tabs(
+    db: State<Database>,
+    tabs: Vec<SavedQueryTab>,
+) -> Result<(), AppError> {
+    let conn = db.conn.lock().unwrap();
+    conn.execute("DELETE FROM query_tabs", [])?;
+    let mut stmt = conn.prepare(
+        "INSERT INTO query_tabs (id, name, sql_text, sort_order, is_active) VALUES (?1, ?2, ?3, ?4, ?5)",
+    )?;
+    for tab in &tabs {
+        stmt.execute(rusqlite::params![
+            tab.id,
+            tab.name,
+            tab.sql_text,
+            tab.sort_order,
+            tab.is_active as i64,
+        ])?;
+    }
+    Ok(())
+}

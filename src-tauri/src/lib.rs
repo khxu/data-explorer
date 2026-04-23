@@ -68,6 +68,8 @@ pub fn run() {
             execute_query,
             get_query_history,
             clear_query_history,
+            load_query_tabs,
+            save_query_tabs,
             export_results,
         ])
         .run(tauri::generate_context!())

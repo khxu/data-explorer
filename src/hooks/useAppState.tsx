@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, createContext, useContext, type ReactNode } from "react";
+import { useState, useCallback, useEffect, useRef, createContext, useContext, type ReactNode } from "react";
 import {
   type DataSource,
   type Tag,
@@ -9,6 +9,9 @@ import {
   listTags,
   listProjects,
   getQueryHistory,
+  loadQueryTabs,
+  saveQueryTabs,
+  type SavedQueryTab,
 } from "@/lib/api";
 
 export interface QueryTab {
@@ -64,8 +67,55 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const [queryTabs, setQueryTabs] = useState<QueryTab[]>(() => [makeTab()]);
   const [activeQueryTabId, setActiveQueryTabId] = useState(() => queryTabs[0]?.id ?? "");
+  const tabsLoaded = useRef(false);
 
   const [error, setError] = useState<string | null>(null);
+
+  // Load persisted tabs on startup
+  useEffect(() => {
+    loadQueryTabs().then((saved) => {
+      if (saved.length > 0) {
+        const tabs = saved.map((s) => ({
+          id: s.id,
+          name: s.name,
+          sql: s.sql_text,
+          result: null,
+          error: null,
+        }));
+        // Restore the nextTabId counter past any saved IDs
+        const maxNum = saved.reduce((max, s) => {
+          const n = parseInt(s.id.replace("tab-", ""), 10);
+          return isNaN(n) ? max : Math.max(max, n);
+        }, 0);
+        nextTabId = maxNum + 1;
+
+        setQueryTabs(tabs);
+        const activeOne = saved.find((s) => s.is_active);
+        setActiveQueryTabId(activeOne ? activeOne.id : tabs[0].id);
+      }
+      tabsLoaded.current = true;
+    }).catch(() => {
+      tabsLoaded.current = true;
+    });
+  }, []);
+
+  // Debounce-save tabs whenever they change
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!tabsLoaded.current) return;
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      const toSave: SavedQueryTab[] = queryTabs.map((t, i) => ({
+        id: t.id,
+        name: t.name,
+        sql_text: t.sql,
+        sort_order: i,
+        is_active: t.id === activeQueryTabId,
+      }));
+      saveQueryTabs(toSave).catch(() => {});
+    }, 500);
+    return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
+  }, [queryTabs, activeQueryTabId]);
 
   // Ensure activeQueryTabId always points to an existing tab
   useEffect(() => {

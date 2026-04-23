@@ -149,6 +149,24 @@ export async function clearQueryHistory(before?: string): Promise<number> {
   return invoke("clear_query_history", { before: before ?? null });
 }
 
+// -- Query Tabs --
+
+export interface SavedQueryTab {
+  id: string;
+  name: string;
+  sql_text: string;
+  sort_order: number;
+  is_active: boolean;
+}
+
+export async function loadQueryTabs(): Promise<SavedQueryTab[]> {
+  return invoke("load_query_tabs");
+}
+
+export async function saveQueryTabs(tabs: SavedQueryTab[]): Promise<void> {
+  return invoke("save_query_tabs", { tabs });
+}
+
 // -- Export --
 
 export async function exportResults(

@@ -66,6 +66,15 @@ impl Database {
                 result_sample TEXT,
                 created_at TEXT NOT NULL DEFAULT (datetime('now'))
             );
+
+            CREATE TABLE IF NOT EXISTS query_tabs (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                sql_text TEXT NOT NULL DEFAULT '',
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                is_active INTEGER NOT NULL DEFAULT 0,
+                updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
             ",
         )?;
         Ok(())
