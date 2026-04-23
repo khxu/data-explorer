@@ -13,6 +13,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import type { QueryResult } from "@/lib/api";
 
 interface Props {
@@ -77,6 +83,7 @@ export function ResizableResultsTable({ result }: Props) {
 
   return (
     <>
+      <TooltipProvider delayDuration={300}>
       <Table style={{ tableLayout: "fixed", width: "max-content", minWidth: "100%" }}>
         <TableHeader>
           <TableRow>
@@ -86,7 +93,16 @@ export function ResizableResultsTable({ result }: Props) {
                 className="text-xs font-semibold whitespace-nowrap relative select-none"
                 style={{ width: columnWidths[i] }}
               >
-                <span className="block truncate pr-2">{col}</span>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="block truncate pr-2">{col}</span>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    <p className="font-mono text-xs">
+                      {col}: <span className="text-muted-foreground">{result.column_types?.[i] ?? "unknown"}</span>
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
                 {/* Resize handle */}
                 <div
                   className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-primary/20 active:bg-primary/30"
@@ -123,6 +139,7 @@ export function ResizableResultsTable({ result }: Props) {
           ))}
         </TableBody>
       </Table>
+      </TooltipProvider>
 
       {/* Cell detail dialog */}
       <Dialog

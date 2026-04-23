@@ -9,6 +9,7 @@ use crate::error::AppError;
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct QueryResult {
     pub columns: Vec<String>,
+    pub column_types: Vec<String>,
     pub rows: Vec<Vec<serde_json::Value>>,
     pub row_count: usize,
     pub execution_time_ms: u64,
@@ -99,6 +100,9 @@ fn execute_duckdb_query(
                 .map_or("?".to_string(), |v| v.to_string())
         })
         .collect();
+    let column_types: Vec<String> = (0..column_count)
+        .map(|i| format!("{}", stmt.column_type(i)))
+        .collect();
 
     drop(stmt);
 
@@ -107,6 +111,7 @@ fn execute_duckdb_query(
 
     Ok(QueryResult {
         columns,
+        column_types,
         row_count: rows.len(),
         rows,
         execution_time_ms: elapsed,

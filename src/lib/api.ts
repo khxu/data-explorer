@@ -115,6 +115,7 @@ export async function listProjects(): Promise<Project[]> {
 
 export interface QueryResult {
   columns: string[];
+  column_types: string[];
   rows: unknown[][];
   row_count: number;
   execution_time_ms: number;

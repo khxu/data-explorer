@@ -40,6 +40,7 @@ export function QueryEditor() {
       {/* SQL Editor */}
       <div className="p-3 border-b space-y-2">
         <SqlEditor
+          key={tabId}
           value={sql}
           onChange={(v) => updateQueryTab(tabId, { sql: v })}
           onRun={handleRun}

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useAppState } from "@/hooks/useAppState";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,29 @@ export function QueryTabBar() {
     closeQueryTab,
     renameQueryTab,
   } = useAppState();
+
+  const switchTab = useCallback(
+    (direction: -1 | 1) => {
+      const idx = queryTabs.findIndex((t) => t.id === activeQueryTabId);
+      if (idx < 0) return;
+      const next = idx + direction;
+      if (next >= 0 && next < queryTabs.length) {
+        setActiveQueryTab(queryTabs[next].id);
+      }
+    },
+    [queryTabs, activeQueryTabId, setActiveQueryTab]
+  );
+
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.metaKey && e.altKey && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+        e.preventDefault();
+        switchTab(e.key === "ArrowLeft" ? -1 : 1);
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [switchTab]);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
