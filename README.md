@@ -40,19 +40,38 @@ Before you can query anything, you need to tell Data Explorer where your files l
 1. In the **sidebar**, click the **+** button next to "Data Sources"
 2. Click **Browse** to pick a file (`.parquet`, `.csv`, `.tsv`, `.json`, `.jsonl`, `.ndjson`)
 3. Give it a **table name** — this is the name you'll use in SQL queries (e.g., `sales`, `users_2024`). It auto-fills from the filename.
-4. Optionally assign **tags** to organize it (you can always add tags later)
+4. Optionally assign **tags** to organize it (you can always add/modify tags later)
 5. Click **Register**
 
-The file stays on disk — Data Explorer just creates a DuckDB view pointing at it.
+The file stays on disk — Data Explorer reads it on-the-fly via DuckDB's `read_parquet`, `read_csv`, or `read_json_auto` functions.
+
+To **unregister** a data source, hover over it in the sidebar and click the **✕** button. A confirmation dialog will appear before removal.
+
+You can also **edit tags** on an existing data source by clicking the **🏷** button, or **refresh** it from disk with the **↻** button.
 
 ### 2. Query Your Data
 
-1. Click on the **Query** tab (or click any data source in the sidebar to auto-populate a `SELECT * FROM "table" LIMIT 100` query)
+1. Click on the **Query** tab (or click any data source in the sidebar to auto-populate a `SELECT * FROM table LIMIT 100` query)
 2. Write SQL in the editor — you can reference any registered table by its name
 3. Press **⌘+Enter** (Mac) or **Ctrl+Enter** (Windows/Linux) to run, or click the **▶ Run** button
-4. Results appear in a scrollable table below the editor, with row count and execution time
+4. Results appear in a resizable, scrollable table below the editor, with row count and execution time
 
 You have access to all of DuckDB's SQL capabilities — joins across tables, window functions, aggregations, CTEs, etc.
+
+#### Multiple Query Tabs
+
+You can open multiple query tabs to run different queries side-by-side and compare results:
+
+- Click the **+** button in the query tab bar to add a new tab
+- **Double-click** a tab name to rename it (e.g., "Revenue by region", "User counts")
+- Each tab preserves its own SQL and results — switch freely without losing state
+- Close tabs with the **✕** button that appears on hover (the last tab can't be closed)
+- **Tabs persist across app restarts** — your SQL and tab names are saved automatically
+
+#### Resizable Columns & Cell Drill-In
+
+- Drag column borders in the results table to resize column widths
+- Click any cell to open a focused view with text wrapping for long values
 
 ### 3. Organize with Tags
 
@@ -60,7 +79,7 @@ Tags let you categorize data sources across projects.
 
 1. Click the **⚙** button next to "Tags" in the sidebar
 2. Create tags with names and colors (e.g., "marketing", "raw-data", "2024")
-3. When registering a data source, select which tags apply
+3. Assign tags when registering a data source, or edit them later via the **🏷** button on any source
 4. Tags appear as colored badges in the sidebar
 
 ### 4. Create Projects
@@ -86,13 +105,14 @@ After running a query, you can save the results to a new file.
 
 **Safety guardrail:** Data Explorer will never overwrite an existing file or write to a path that matches a registered data source. Exports always create new files.
 
-### 6. Browse Query History
+### 6. Browse & Manage Query History
 
 Every query you run is logged with its SQL, status, timing, and a small result sample.
 
 1. Click the **History** tab
 2. Browse past queries — successful ones show row count and execution time, failed ones show the error message
-3. Click **Reuse** on any entry to load its SQL back into the query editor and switch to the Query tab
+3. Click **Reuse** on any entry to load its SQL back into the active query tab and switch to the Query tab
+4. **Clear history**: click **Clear All** to delete everything, or **Clear before…** to remove entries older than a specific date
 
 ---
 
@@ -114,13 +134,14 @@ Every query you run is logged with its SQL, status, timing, and a small result s
 │  ├──────────┬────────────────┤      │
 │  │ DuckDB   │  SQLite        │      │
 │  │ (queries)│  (metadata,    │      │
-│  │          │   history)     │      │
+│  │          │   history,     │      │
+│  │          │   query tabs)  │      │
 │  └──────────┴────────────────┘      │
 └─────────────────────────────────────┘
 ```
 
-- **DuckDB** runs in-memory in the Rust backend. Registered files are loaded as views (`read_parquet`, `read_csv`, `read_json_auto`) and re-registered before each query so changes to the underlying files are picked up automatically.
-- **SQLite** stores all persistent metadata: registered data sources, tags, projects, and query history (with truncated result samples to keep the database small).
+- **DuckDB** runs in-memory in the Rust backend. Registered files are wrapped as CTEs (`WITH tablename AS (SELECT * FROM read_parquet(...))`) before each query, so changes to the underlying files are picked up automatically.
+- **SQLite** stores all persistent metadata: registered data sources, tags, projects, query tabs, and query history (with truncated result samples to keep the database small).
 - **Tauri** bridges the frontend and backend via typed `invoke()` commands with native OS file dialogs for picking files and save locations.
 
 ## Supported File Formats
@@ -142,7 +163,7 @@ Every query you run is logged with its SQL, status, timing, and a small result s
 
 ```
 src/                          # React frontend
-├── components/               # UI components (Sidebar, QueryEditor, HistoryPanel, dialogs)
+├── components/               # UI components (Sidebar, QueryEditor, QueryTabBar, HistoryPanel, dialogs)
 ├── components/ui/            # shadcn/ui primitives
 ├── hooks/useAppState.tsx     # Global app state context
 └── lib/api.ts                # Typed wrappers for Tauri invoke() calls
@@ -150,13 +171,13 @@ src/                          # React frontend
 src-tauri/src/                # Rust backend
 ├── lib.rs                    # Tauri app setup and state management
 ├── db.rs                     # SQLite connection and migrations
-├── duckdb_engine.rs          # DuckDB connection and view registration
+├── duckdb_engine.rs          # DuckDB connection and CTE-based query wrapping
 ├── error.rs                  # Error types
 └── commands/                 # Tauri command handlers
-    ├── data_sources.rs       # Register/remove/list data files
+    ├── data_sources.rs       # Register/remove/refresh/list data files
     ├── tags.rs               # Tag CRUD and assignment
     ├── projects.rs           # Project CRUD (tag-based filters)
-    ├── queries.rs            # Execute SQL, query history
+    ├── queries.rs            # Execute SQL, query history, query tab persistence
     └── export.rs             # Export results with overwrite protection
 ```
 
