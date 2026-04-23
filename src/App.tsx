@@ -1,3 +1,4 @@
+import { useState, useCallback, useRef } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AppProvider, useAppState } from "@/hooks/useAppState";
 import { Sidebar } from "@/components/Sidebar";
@@ -8,10 +9,42 @@ import "./App.css";
 
 function AppContent() {
   const { error, setError, activeTab, setActiveTab, refreshHistory } = useAppState();
+  const [sidebarWidth, setSidebarWidth] = useState(256);
+  const isResizing = useRef(false);
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizing.current = true;
+
+    const onMouseMove = (ev: MouseEvent) => {
+      if (!isResizing.current) return;
+      const newWidth = Math.min(Math.max(ev.clientX, 180), 600);
+      setSidebarWidth(newWidth);
+    };
+
+    const onMouseUp = () => {
+      isResizing.current = false;
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+  }, []);
 
   return (
     <div className="flex h-screen w-screen overflow-hidden">
-      <Sidebar />
+      <div style={{ width: sidebarWidth, minWidth: 180, maxWidth: 600 }} className="flex-shrink-0">
+        <Sidebar />
+      </div>
+      <div
+        className="w-1.5 cursor-col-resize bg-border/50 hover:bg-primary/30 active:bg-primary/50 transition-colors flex-shrink-0"
+        onMouseDown={handleMouseDown}
+      />
       <main className="flex-1 flex flex-col min-w-0">
         {/* Error banner */}
         {error && (

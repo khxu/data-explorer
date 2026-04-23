@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { useAppState } from "@/hooks/useAppState";
 import { executeQuery } from "@/lib/api";
 import { ExportDialog } from "./ExportDialog";
 import { ResizableResultsTable } from "./ResizableResultsTable";
+import { SqlEditor } from "./SqlEditor";
 
 export function QueryEditor() {
   const { queryTabs, activeQueryTabId, updateQueryTab, refreshHistory } =
@@ -35,24 +35,14 @@ export function QueryEditor() {
     }
   }
 
-  function handleKeyDown(e: React.KeyboardEvent) {
-    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-      e.preventDefault();
-      handleRun();
-    }
-  }
-
   return (
     <div className="flex flex-col h-full">
       {/* SQL Editor */}
       <div className="p-3 border-b space-y-2">
-        <Textarea
+        <SqlEditor
           value={sql}
-          onChange={(e) => updateQueryTab(tabId, { sql: e.target.value })}
-          onKeyDown={handleKeyDown}
-          placeholder="SELECT * FROM your_table LIMIT 100"
-          className="font-mono text-sm min-h-[100px] resize-y"
-          rows={4}
+          onChange={(v) => updateQueryTab(tabId, { sql: v })}
+          onRun={handleRun}
         />
         <div className="flex items-center justify-between">
           <div className="flex gap-2">

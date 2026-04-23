@@ -82,7 +82,7 @@ export function Sidebar() {
   }
 
   return (
-    <div className="w-64 border-r bg-muted/30 flex flex-col h-full">
+    <div className="w-full border-r bg-muted/30 flex flex-col h-full">
       {/* Projects */}
       <div className="p-3">
         <div className="flex items-center justify-between mb-2">
