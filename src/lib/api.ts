@@ -136,6 +136,10 @@ export async function executeQuery(sql: string): Promise<QueryResult> {
   return invoke("execute_query", { sql });
 }
 
+export async function getStandaloneSql(sql: string): Promise<string> {
+  return invoke("get_standalone_sql", { sql });
+}
+
 export async function getQueryHistory(
   limit?: number,
   offset?: number

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppState } from "@/hooks/useAppState";
-import { executeQuery } from "@/lib/api";
+import { executeQuery, getStandaloneSql } from "@/lib/api";
 import { ExportDialog } from "./ExportDialog";
 import { ResizableResultsTable } from "./ResizableResultsTable";
 import { SqlEditor } from "./SqlEditor";
@@ -11,6 +11,7 @@ export function QueryEditor() {
     useAppState();
   const [running, setRunning] = useState(false);
   const [showExport, setShowExport] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const tab = queryTabs.find((t) => t.id === activeQueryTabId);
   if (!tab) return null;
@@ -32,6 +33,17 @@ export function QueryEditor() {
       updateQueryTab(tabId, { error: String(e), result: null });
     } finally {
       setRunning(false);
+    }
+  }
+
+  async function handleCopySql() {
+    try {
+      const standalone = await getStandaloneSql(sql);
+      await navigator.clipboard.writeText(standalone);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (e) {
+      console.error("Failed to copy SQL:", e);
     }
   }
 
@@ -59,6 +71,15 @@ export function QueryEditor() {
                 Export
               </Button>
             )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleCopySql}
+              disabled={!sql.trim()}
+              title="Copy standalone SQL (with file references expanded) to clipboard"
+            >
+              {copied ? "✓ Copied" : "Copy SQL"}
+            </Button>
           </div>
           <span className="text-xs text-muted-foreground">⌘+Enter to run</span>
         </div>

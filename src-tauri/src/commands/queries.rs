@@ -185,6 +185,26 @@ pub fn execute_query(
 }
 
 #[tauri::command]
+pub fn get_standalone_sql(
+    db: State<Database>,
+    duckdb: State<DuckDbEngine>,
+    sql: String,
+) -> Result<String, AppError> {
+    // Ensure the in-memory source registry is fully up-to-date from SQLite
+    let conn = db.conn.lock().unwrap();
+    let mut stmt = conn.prepare("SELECT name, file_path, file_format FROM data_sources")?;
+    let sources: Vec<(String, String, String)> = stmt
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
+        .collect::<Result<Vec<_>, _>>()?;
+    drop(stmt);
+    drop(conn);
+    for (name, path, format) in &sources {
+        duckdb.register_source(name, path, format)?;
+    }
+    duckdb.inline_sources(&sql)
+}
+
+#[tauri::command]
 pub fn clear_query_history(
     db: State<Database>,
     before: Option<String>,

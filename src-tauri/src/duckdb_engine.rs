@@ -97,4 +97,59 @@ impl DuckDbEngine {
 
         Ok(sql)
     }
+
+    /// Replace all registered table name references in the SQL with inline
+    /// read_parquet/read_csv/read_json_auto calls. This produces fully
+    /// self-contained SQL that can run in the DuckDB CLI without any CTEs.
+    pub fn inline_sources(&self, user_sql: &str) -> Result<String, AppError> {
+        let sources = self.sources.lock().unwrap();
+        if sources.is_empty() {
+            return Ok(user_sql.to_string());
+        }
+
+        // Sort by name length descending so longer names are replaced first,
+        // preventing partial matches (e.g., "rs_graph_document" matching inside
+        // "rs_graph_document_repository_link")
+        let mut sorted: Vec<(&String, &SourceInfo)> = sources.iter().collect();
+        sorted.sort_by(|a, b| b.0.len().cmp(&a.0.len()));
+
+        let mut result = user_sql.to_string();
+        for (name, info) in &sorted {
+            let read_fn = Self::read_fn_for(&info.file_path, &info.file_format)?;
+            // Replace table name references that appear as whole identifiers.
+            // We look for the name bounded by non-identifier characters.
+            let mut new_result = String::new();
+            let mut remaining = result.as_str();
+            while let Some(pos) = remaining.find(name.as_str()) {
+                // Check character before the match
+                let before_ok = if pos == 0 {
+                    true
+                } else {
+                    let ch = remaining.as_bytes()[pos - 1] as char;
+                    !ch.is_alphanumeric() && ch != '_'
+                };
+                // Check character after the match
+                let after_pos = pos + name.len();
+                let after_ok = if after_pos >= remaining.len() {
+                    true
+                } else {
+                    let ch = remaining.as_bytes()[after_pos] as char;
+                    !ch.is_alphanumeric() && ch != '_'
+                };
+
+                if before_ok && after_ok {
+                    new_result.push_str(&remaining[..pos]);
+                    new_result.push_str(&read_fn);
+                    remaining = &remaining[after_pos..];
+                } else {
+                    new_result.push_str(&remaining[..after_pos]);
+                    remaining = &remaining[after_pos..];
+                }
+            }
+            new_result.push_str(remaining);
+            result = new_result;
+        }
+
+        Ok(result)
+    }
 }
