@@ -99,7 +99,7 @@ export function QueryEditor() {
             {result.row_count} row{result.row_count !== 1 ? "s" : ""} •{" "}
             {result.execution_time_ms}ms
           </div>
-          <div className="flex-1 min-h-0 overflow-auto">
+          <div className="flex-1 min-h-0">
             <ResizableResultsTable result={result} />
           </div>
         </div>
