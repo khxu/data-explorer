@@ -18,14 +18,31 @@ export interface QueryTab {
   id: string;
   name: string;
   sql: string;
+  projectId: string | null;
   result: QueryResult | null;
   error: string | null;
 }
 
+export const ALL_QUERY_TAB_PROJECTS = "__all__";
+export const UNASSIGNED_QUERY_TAB_PROJECT = "__unassigned__";
+
+export function queryTabMatchesProjectFilter(tab: QueryTab, filter: string) {
+  if (filter === ALL_QUERY_TAB_PROJECTS) return true;
+  if (filter === UNASSIGNED_QUERY_TAB_PROJECT) return tab.projectId === null;
+  return tab.projectId === filter;
+}
+
 let nextTabId = 1;
-function makeTab(name?: string, sql?: string): QueryTab {
+function makeTab(name?: string, sql?: string, projectId: string | null = null): QueryTab {
   const id = `tab-${nextTabId++}`;
-  return { id, name: name ?? `Query ${nextTabId - 1}`, sql: sql ?? "", result: null, error: null };
+  return {
+    id,
+    name: name ?? `Query ${nextTabId - 1}`,
+    sql: sql ?? "",
+    projectId,
+    result: null,
+    error: null,
+  };
 }
 
 interface AppState {
@@ -37,6 +54,7 @@ interface AppState {
   activeTab: string;
   queryTabs: QueryTab[];
   activeQueryTabId: string;
+  queryTabProjectFilter: string;
   error: string | null;
   refreshDataSources: () => Promise<void>;
   refreshTags: () => Promise<void>;
@@ -47,9 +65,13 @@ interface AppState {
   setError: (e: string | null) => void;
   // Query tab management
   setActiveQueryTab: (id: string) => void;
-  addQueryTab: (sql?: string) => void;
+  setQueryTabProjectFilter: (projectId: string) => void;
+  addQueryTab: (sql?: string, projectId?: string | null) => void;
   closeQueryTab: (id: string) => void;
   renameQueryTab: (id: string, name: string) => void;
+  setQueryTabProject: (id: string, projectId: string | null) => void;
+  moveUnassignedQueryTabsToProject: (projectId: string) => void;
+  clearQueryTabProject: (projectId: string) => void;
   updateQueryTab: (id: string, updates: Partial<Pick<QueryTab, "sql" | "result" | "error">>) => void;
   /** Convenience: set SQL on the currently active query tab */
   setLastSql: (s: string) => void;
@@ -67,6 +89,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const [queryTabs, setQueryTabs] = useState<QueryTab[]>(() => [makeTab()]);
   const [activeQueryTabId, setActiveQueryTabId] = useState(() => queryTabs[0]?.id ?? "");
+  const [queryTabProjectFilter, setQueryTabProjectFilter] = useState(ALL_QUERY_TAB_PROJECTS);
   const tabsLoaded = useRef(false);
 
   const [error, setError] = useState<string | null>(null);
@@ -79,6 +102,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           id: s.id,
           name: s.name,
           sql: s.sql_text,
+          projectId: s.project_id,
           result: null,
           error: null,
         }));
@@ -109,6 +133,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         id: t.id,
         name: t.name,
         sql_text: t.sql,
+        project_id: t.projectId,
         sort_order: i,
         is_active: t.id === activeQueryTabId,
       }));
@@ -124,12 +149,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [queryTabs, activeQueryTabId]);
 
-  const addQueryTab = useCallback((sql?: string) => {
-    const tab = makeTab(undefined, sql);
+  useEffect(() => {
+    if (
+      queryTabProjectFilter !== ALL_QUERY_TAB_PROJECTS &&
+      queryTabProjectFilter !== UNASSIGNED_QUERY_TAB_PROJECT &&
+      !projects.some((project) => project.id === queryTabProjectFilter)
+    ) {
+      setQueryTabProjectFilter(ALL_QUERY_TAB_PROJECTS);
+    }
+  }, [projects, queryTabProjectFilter]);
+
+  const addQueryTab = useCallback((sql?: string, projectId?: string | null) => {
+    const defaultProjectId =
+      queryTabProjectFilter === UNASSIGNED_QUERY_TAB_PROJECT
+        ? null
+        : queryTabProjectFilter !== ALL_QUERY_TAB_PROJECTS
+        ? queryTabProjectFilter
+        : activeProject?.id ?? null;
+    const tab = makeTab(
+      undefined,
+      sql,
+      projectId !== undefined ? projectId : defaultProjectId
+    );
     setQueryTabs((prev) => [...prev, tab]);
     setActiveQueryTabId(tab.id);
     setActiveTab("query");
-  }, []);
+  }, [activeProject, queryTabProjectFilter]);
 
   const closeQueryTab = useCallback((id: string) => {
     setQueryTabs((prev) => {
@@ -142,6 +187,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setQueryTabs((prev) => prev.map((t) => (t.id === id ? { ...t, name } : t)));
   }, []);
 
+  const setQueryTabProject = useCallback((id: string, projectId: string | null) => {
+    setQueryTabs((prev) => prev.map((t) => (t.id === id ? { ...t, projectId } : t)));
+  }, []);
+
+  const moveUnassignedQueryTabsToProject = useCallback((projectId: string) => {
+    setQueryTabs((prev) =>
+      prev.map((t) => (t.projectId === null ? { ...t, projectId } : t))
+    );
+    setQueryTabProjectFilter(projectId);
+  }, []);
+
+  const clearQueryTabProject = useCallback((projectId: string) => {
+    setQueryTabs((prev) =>
+      prev.map((t) => (t.projectId === projectId ? { ...t, projectId: null } : t))
+    );
+  }, []);
+
   const updateQueryTab = useCallback(
     (id: string, updates: Partial<Pick<QueryTab, "sql" | "result" | "error">>) => {
       setQueryTabs((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)));
@@ -152,9 +214,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const setLastSql = useCallback(
     (s: string) => {
       setActiveTab("query");
-      updateQueryTab(activeQueryTabId, { sql: s });
+      const activeQueryTab = queryTabs.find((t) => t.id === activeQueryTabId);
+      if (
+        activeQueryTab &&
+        queryTabMatchesProjectFilter(activeQueryTab, queryTabProjectFilter)
+      ) {
+        updateQueryTab(activeQueryTabId, { sql: s });
+        return;
+      }
+      addQueryTab(s);
     },
-    [activeQueryTabId, updateQueryTab]
+    [activeQueryTabId, addQueryTab, queryTabProjectFilter, queryTabs, updateQueryTab]
   );
 
   const refreshDataSources = useCallback(async () => {
@@ -210,6 +280,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         activeTab,
         queryTabs,
         activeQueryTabId,
+        queryTabProjectFilter,
         error,
         refreshDataSources,
         refreshTags,
@@ -219,9 +290,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setActiveTab,
         setError,
         setActiveQueryTab: setActiveQueryTabId,
+        setQueryTabProjectFilter,
         addQueryTab,
         closeQueryTab,
         renameQueryTab,
+        setQueryTabProject,
+        moveUnassignedQueryTabsToProject,
+        clearQueryTabProject,
         updateQueryTab,
         setLastSql,
       }}

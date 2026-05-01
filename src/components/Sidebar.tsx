@@ -37,6 +37,7 @@ export function Sidebar() {
     refreshDataSources,
     refreshProjects,
     setLastSql,
+    clearQueryTabProject,
   } = useAppState();
 
   const [showRegister, setShowRegister] = useState(false);
@@ -71,6 +72,7 @@ export function Sidebar() {
 
   async function handleDeleteProject(id: string) {
     await deleteProject(id);
+    clearQueryTabProject(id);
     await refreshProjects();
     if (activeProject?.id === id) {
       setActiveProject(null);

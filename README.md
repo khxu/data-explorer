@@ -65,6 +65,9 @@ You can open multiple query tabs to run different queries side-by-side and compa
 - Click the **+** button in the query tab bar to add a new tab
 - **Double-click** a tab name to rename it (e.g., "Revenue by region", "User counts")
 - Each tab preserves its own SQL and results — switch freely without losing state
+- Use the **Active tab project** dropdown to assign the current query tab to a project, or choose **Unassigned**
+- If you have older tabs without a project, use **Move unassigned to...** in the query tab bar to bulk move them into a project
+- Use the **Query tabs** dropdown to show all tabs, only unassigned tabs, or only tabs for a specific project
 - Close tabs with the **✕** button that appears on hover (the last tab can't be closed)
 - **Tabs persist across app restarts** — your SQL and tab names are saved automatically
 

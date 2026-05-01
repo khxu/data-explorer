@@ -5,16 +5,46 @@ import { executeQuery, getStandaloneSql } from "@/lib/api";
 import { ExportDialog } from "./ExportDialog";
 import { ResizableResultsTable } from "./ResizableResultsTable";
 import { SqlEditor } from "./SqlEditor";
+import {
+  ALL_QUERY_TAB_PROJECTS,
+  UNASSIGNED_QUERY_TAB_PROJECT,
+  queryTabMatchesProjectFilter,
+} from "@/hooks/useAppState";
 
 export function QueryEditor() {
-  const { queryTabs, activeQueryTabId, updateQueryTab, refreshHistory } =
-    useAppState();
+  const {
+    queryTabs,
+    activeQueryTabId,
+    queryTabProjectFilter,
+    updateQueryTab,
+    addQueryTab,
+    refreshHistory,
+  } = useAppState();
   const [running, setRunning] = useState(false);
   const [showExport, setShowExport] = useState(false);
   const [copied, setCopied] = useState(false);
 
   const tab = queryTabs.find((t) => t.id === activeQueryTabId);
-  if (!tab) return null;
+  if (!tab || !queryTabMatchesProjectFilter(tab, queryTabProjectFilter)) {
+    const projectId =
+      queryTabProjectFilter === ALL_QUERY_TAB_PROJECTS
+        ? undefined
+        : queryTabProjectFilter !== UNASSIGNED_QUERY_TAB_PROJECT
+        ? queryTabProjectFilter
+        : null;
+    return (
+      <div className="flex h-full items-center justify-center">
+        <div className="space-y-3 text-center">
+          <p className="text-sm text-muted-foreground">
+            Create a query tab to start exploring this project.
+          </p>
+          <Button size="sm" onClick={() => addQueryTab(undefined, projectId)}>
+            New query tab
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   const tabId = tab.id;
   const sql = tab.sql;

@@ -160,6 +160,7 @@ export interface SavedQueryTab {
   id: string;
   name: string;
   sql_text: string;
+  project_id: string | null;
   sort_order: number;
   is_active: boolean;
 }

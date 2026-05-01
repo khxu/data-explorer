@@ -77,6 +77,21 @@ impl Database {
             );
             ",
         )?;
+
+        let has_query_tab_project_id = conn
+            .prepare("PRAGMA table_info(query_tabs)")?
+            .query_map([], |row| row.get::<_, String>(1))?
+            .collect::<Result<Vec<_>, _>>()?
+            .iter()
+            .any(|column| column == "project_id");
+
+        if !has_query_tab_project_id {
+            conn.execute(
+                "ALTER TABLE query_tabs ADD COLUMN project_id TEXT REFERENCES projects(id) ON DELETE SET NULL",
+                [],
+            )?;
+        }
+
         Ok(())
     }
 }
