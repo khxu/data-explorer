@@ -1,15 +1,24 @@
-import { useState, useCallback, useRef } from "react";
+import { useCallback, useRef } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AppProvider, useAppState } from "@/hooks/useAppState";
+import { usePersistedNumber } from "@/hooks/usePersistedNumber";
 import { Sidebar } from "@/components/Sidebar";
 import { QueryEditor } from "@/components/QueryEditor";
 import { QueryTabBar } from "@/components/QueryTabBar";
 import { HistoryPanel } from "@/components/HistoryPanel";
 import "./App.css";
 
+const SIDEBAR_WIDTH_STORAGE_KEY = "data-explorer.sidebarWidth";
+const SIDEBAR_WIDTH_BOUNDS = { min: 180, max: 600 };
+const DEFAULT_SIDEBAR_WIDTH = 256;
+
 function AppContent() {
   const { error, setError, activeTab, setActiveTab, refreshHistory } = useAppState();
-  const [sidebarWidth, setSidebarWidth] = useState(256);
+  const [sidebarWidth, setSidebarWidth] = usePersistedNumber(
+    SIDEBAR_WIDTH_STORAGE_KEY,
+    DEFAULT_SIDEBAR_WIDTH,
+    SIDEBAR_WIDTH_BOUNDS
+  );
   const isResizing = useRef(false);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -18,7 +27,10 @@ function AppContent() {
 
     const onMouseMove = (ev: MouseEvent) => {
       if (!isResizing.current) return;
-      const newWidth = Math.min(Math.max(ev.clientX, 180), 600);
+      const newWidth = Math.min(
+        Math.max(ev.clientX, SIDEBAR_WIDTH_BOUNDS.min),
+        SIDEBAR_WIDTH_BOUNDS.max
+      );
       setSidebarWidth(newWidth);
     };
 
@@ -38,7 +50,14 @@ function AppContent() {
 
   return (
     <div className="flex h-screen w-screen overflow-hidden">
-      <div style={{ width: sidebarWidth, minWidth: 180, maxWidth: 600 }} className="flex-shrink-0">
+      <div
+        style={{
+          width: sidebarWidth,
+          minWidth: SIDEBAR_WIDTH_BOUNDS.min,
+          maxWidth: SIDEBAR_WIDTH_BOUNDS.max,
+        }}
+        className="flex-shrink-0"
+      >
         <Sidebar />
       </div>
       <div

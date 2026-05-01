@@ -1,8 +1,9 @@
-import { useRef, useEffect, useCallback, useState } from "react";
+import { useRef, useEffect, useCallback } from "react";
 import { EditorView, keymap, placeholder as phPlugin } from "@codemirror/view";
 import { EditorState } from "@codemirror/state";
 import { sql, PostgreSQL } from "@codemirror/lang-sql";
 import { oneDark } from "@codemirror/theme-one-dark";
+import { usePersistedNumber } from "@/hooks/usePersistedNumber";
 import {
   defaultKeymap,
   indentWithTab,
@@ -23,6 +24,10 @@ interface SqlEditorProps {
   placeholder?: string;
   className?: string;
 }
+
+const SQL_EDITOR_HEIGHT_STORAGE_KEY = "data-explorer.sqlEditorHeight";
+const SQL_EDITOR_HEIGHT_BOUNDS = { min: 80, max: 600 };
+const DEFAULT_SQL_EDITOR_HEIGHT = 150;
 
 export function SqlEditor({
   value,
@@ -132,7 +137,11 @@ export function SqlEditor({
     }
   }, [value]);
 
-  const [height, setHeight] = useState(150);
+  const [height, setHeight] = usePersistedNumber(
+    SQL_EDITOR_HEIGHT_STORAGE_KEY,
+    DEFAULT_SQL_EDITOR_HEIGHT,
+    SQL_EDITOR_HEIGHT_BOUNDS
+  );
   const resizing = useRef(false);
 
   const handleResizeDown = useCallback((e: React.MouseEvent) => {
@@ -143,7 +152,12 @@ export function SqlEditor({
 
     const onMove = (ev: MouseEvent) => {
       if (!resizing.current) return;
-      setHeight(Math.max(80, Math.min(startH + ev.clientY - startY, 600)));
+      setHeight(
+        Math.max(
+          SQL_EDITOR_HEIGHT_BOUNDS.min,
+          Math.min(startH + ev.clientY - startY, SQL_EDITOR_HEIGHT_BOUNDS.max)
+        )
+      );
     };
     const onUp = () => {
       resizing.current = false;
