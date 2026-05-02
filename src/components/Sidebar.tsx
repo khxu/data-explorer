@@ -57,6 +57,7 @@ export function Sidebar() {
   async function handleRefreshSource(id: string) {
     try {
       await apiRefreshDataSource(id);
+      await refreshDataSources();
     } catch (e) {
       console.error("Failed to refresh data source:", e);
     }
@@ -65,6 +66,7 @@ export function Sidebar() {
   async function handleRefreshAll() {
     try {
       await apiRefreshAllDataSources();
+      await refreshDataSources();
     } catch (e) {
       console.error("Failed to refresh all data sources:", e);
     }

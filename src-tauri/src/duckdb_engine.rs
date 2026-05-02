@@ -100,6 +100,29 @@ impl DuckDbEngine {
         Ok(())
     }
 
+    pub fn columns_for_source(
+        &self,
+        file_path: &str,
+        file_format: &str,
+    ) -> Result<Vec<(String, String)>, AppError> {
+        let read_fn = Self::read_fn_for(file_path, file_format)?;
+        let sql = format!("SELECT * FROM {} LIMIT 0", read_fn);
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(&sql)?;
+        let rows = stmt.query([])?;
+        drop(rows);
+        let columns = (0..stmt.column_count())
+            .map(|i| {
+                (
+                    stmt.column_name(i)
+                        .map_or("?".to_string(), |name| name.to_string()),
+                    format!("{}", stmt.column_type(i)),
+                )
+            })
+            .collect();
+        Ok(columns)
+    }
+
     /// Build a CTE prefix that makes all registered sources available as
     /// named tables. This completely bypasses catalog resolution, avoiding
     /// the duckdb crate's `prepare` / `duckdb_extract_statements` path
@@ -323,5 +346,24 @@ mod tests {
         let exported = std::fs::read_to_string(&destination).unwrap();
         std::fs::remove_file(destination).unwrap();
         assert_eq!(exported, "id\n1\n");
+    }
+
+    #[test]
+    fn columns_for_source_executes_before_reading_column_types() {
+        let engine = DuckDbEngine::new().unwrap();
+        let source = std::env::temp_dir().join(format!(
+            "data_explorer_schema_{}.csv",
+            uuid::Uuid::new_v4().simple()
+        ));
+        std::fs::write(&source, "id,name\n1,Ada\n").unwrap();
+
+        let columns = engine
+            .columns_for_source(source.to_str().unwrap(), "csv")
+            .unwrap();
+
+        std::fs::remove_file(source).unwrap();
+        assert_eq!(columns.len(), 2);
+        assert_eq!(columns[0].0, "id");
+        assert_eq!(columns[1].0, "name");
     }
 }

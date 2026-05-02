@@ -12,6 +12,17 @@ export interface DataSource {
   tags: string[];
 }
 
+export interface DataSourceColumn {
+  name: string;
+  data_type: string;
+}
+
+export interface DataSourceSchema {
+  data_source_id: string;
+  name: string;
+  columns: DataSourceColumn[];
+}
+
 export async function registerDataSource(
   name: string,
   filePath: string
@@ -35,6 +46,12 @@ export async function listDataSources(
   tagIds?: string[]
 ): Promise<DataSource[]> {
   return invoke("list_data_sources", { tagIds: tagIds ?? null });
+}
+
+export async function getDataSourceSchema(
+  id: string
+): Promise<DataSourceSchema> {
+  return invoke("get_data_source_schema", { id });
 }
 
 // -- Tags --

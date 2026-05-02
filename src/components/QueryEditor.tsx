@@ -13,6 +13,7 @@ import {
 
 export function QueryEditor() {
   const {
+    dataSourceSchemas,
     queryTabs,
     activeQueryTabId,
     queryTabProjectFilter,
@@ -124,6 +125,7 @@ export function QueryEditor() {
         <SqlEditor
           key={tabId}
           value={sql}
+          dataSourceSchemas={dataSourceSchemas}
           onChange={(v) => updateQueryTab(tabId, { sql: v })}
           onRun={handleRun}
         />

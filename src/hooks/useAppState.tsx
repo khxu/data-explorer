@@ -5,7 +5,9 @@ import {
   type Project,
   type QueryResult,
   type QueryHistoryEntry,
+  type DataSourceSchema,
   listDataSources,
+  getDataSourceSchema,
   listTags,
   listProjects,
   getQueryHistory,
@@ -50,6 +52,7 @@ function makeTab(name?: string, sql?: string, projectId: string | null = null): 
 
 interface AppState {
   dataSources: DataSource[];
+  dataSourceSchemas: DataSourceSchema[];
   tags: Tag[];
   projects: Project[];
   queryHistory: QueryHistoryEntry[];
@@ -85,6 +88,7 @@ const AppContext = createContext<AppState | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [dataSources, setDataSources] = useState<DataSource[]>([]);
+  const [dataSourceSchemas, setDataSourceSchemas] = useState<DataSourceSchema[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [queryHistory, setQueryHistory] = useState<QueryHistoryEntry[]>([]);
@@ -264,7 +268,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const tagIds = activeProject?.tag_filter.length
         ? activeProject.tag_filter
         : undefined;
-      setDataSources(await listDataSources(tagIds));
+      const sources = await listDataSources(tagIds);
+      const schemas = await Promise.all(
+        sources.map((source) => getDataSourceSchema(source.id))
+      );
+      setDataSources(sources);
+      setDataSourceSchemas(schemas);
     } catch (e) {
       setError(String(e));
     }
@@ -305,6 +314,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     <AppContext.Provider
       value={{
         dataSources,
+        dataSourceSchemas,
         tags,
         projects,
         queryHistory,

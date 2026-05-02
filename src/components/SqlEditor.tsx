@@ -1,14 +1,16 @@
-import { useRef, useEffect, useCallback } from "react";
+import { useRef, useEffect, useCallback, useMemo } from "react";
 import {
   EditorView,
   keymap,
   lineNumbers,
   placeholder as phPlugin,
 } from "@codemirror/view";
-import { EditorState } from "@codemirror/state";
-import { sql, PostgreSQL } from "@codemirror/lang-sql";
+import { Compartment, EditorState } from "@codemirror/state";
+import { schemaCompletionSource, type SQLNamespace } from "@codemirror/lang-sql";
+import { DuckDBDialect } from "@marimo-team/codemirror-sql/dialects";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { usePersistedNumber } from "@/hooks/usePersistedNumber";
+import type { DataSourceSchema } from "@/lib/api";
 import {
   defaultKeymap,
   indentWithTab,
@@ -19,11 +21,19 @@ import {
   syntaxHighlighting,
   defaultHighlightStyle,
   bracketMatching,
+  LanguageSupport,
 } from "@codemirror/language";
-import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
+import {
+  autocompletion,
+  closeBrackets,
+  closeBracketsKeymap,
+  completionKeymap,
+  type Completion,
+} from "@codemirror/autocomplete";
 
 interface SqlEditorProps {
   value: string;
+  dataSourceSchemas?: DataSourceSchema[];
   onChange: (value: string) => void;
   onRun?: () => void;
   placeholder?: string;
@@ -36,6 +46,7 @@ const DEFAULT_SQL_EDITOR_HEIGHT = 150;
 
 export function SqlEditor({
   value,
+  dataSourceSchemas = [],
   onChange,
   onRun,
   placeholder = "SELECT * FROM your_table LIMIT 100",
@@ -43,10 +54,30 @@ export function SqlEditor({
 }: SqlEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
+  const sqlCompartmentRef = useRef(new Compartment());
   const onChangeRef = useRef(onChange);
   const onRunRef = useRef(onRun);
   onChangeRef.current = onChange;
   onRunRef.current = onRun;
+
+  const completionSchema = useMemo(
+    () => buildCompletionSchema(dataSourceSchemas),
+    [dataSourceSchemas]
+  );
+  const sqlSupport = useMemo(
+    () =>
+      new LanguageSupport(DuckDBDialect.language, [
+        DuckDBDialect.language.data.of({
+          autocomplete: schemaCompletionSource({
+            dialect: DuckDBDialect,
+            schema: completionSchema,
+          }),
+        }),
+      ]),
+    [completionSchema]
+  );
+  const sqlSupportRef = useRef(sqlSupport);
+  sqlSupportRef.current = sqlSupport;
 
   const createView = useCallback(() => {
     if (!containerRef.current) return;
@@ -72,8 +103,15 @@ export function SqlEditor({
     const extensions = [
       runKeymap,
       history(),
-      keymap.of([...defaultKeymap, ...historyKeymap, ...closeBracketsKeymap, indentWithTab]),
-      sql({ dialect: PostgreSQL }),
+      keymap.of([
+        ...defaultKeymap,
+        ...historyKeymap,
+        ...completionKeymap,
+        ...closeBracketsKeymap,
+        indentWithTab,
+      ]),
+      sqlCompartmentRef.current.of(sqlSupportRef.current),
+      autocompletion({ activateOnTyping: true }),
       syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
       bracketMatching(),
       closeBrackets(),
@@ -140,6 +178,14 @@ export function SqlEditor({
     };
   }, [createView]);
 
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    view.dispatch({
+      effects: sqlCompartmentRef.current.reconfigure(sqlSupport),
+    });
+  }, [sqlSupport]);
+
   // Sync external value changes (e.g., clicking sidebar populates SQL)
   useEffect(() => {
     const view = viewRef.current;
@@ -198,4 +244,16 @@ export function SqlEditor({
       />
     </div>
   );
+}
+
+function buildCompletionSchema(dataSourceSchemas: DataSourceSchema[]): SQLNamespace {
+  const schema: Record<string, Completion[]> = {};
+  for (const dataSource of dataSourceSchemas) {
+    schema[dataSource.name] = dataSource.columns.map((column) => ({
+      label: column.name,
+      type: "property",
+      detail: column.data_type,
+    }));
+  }
+  return schema;
 }

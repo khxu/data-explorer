@@ -56,6 +56,7 @@ pub fn run() {
             remove_data_source,
             refresh_data_source,
             refresh_all_data_sources,
+            get_data_source_schema,
             list_data_sources,
             create_tag,
             delete_tag,

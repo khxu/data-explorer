@@ -16,6 +16,19 @@ pub struct DataSource {
     pub tags: Vec<String>, // tag IDs
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DataSourceColumn {
+    pub name: String,
+    pub data_type: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DataSourceSchema {
+    pub data_source_id: String,
+    pub name: String,
+    pub columns: Vec<DataSourceColumn>,
+}
+
 fn detect_format(file_path: &str) -> Option<String> {
     let path = std::path::Path::new(file_path);
     match path.extension().and_then(|e| e.to_str()) {
@@ -122,6 +135,33 @@ pub fn refresh_all_data_sources(
         duckdb.register_source(name, path, format)?;
     }
     Ok(())
+}
+
+#[tauri::command]
+pub fn get_data_source_schema(
+    db: State<std::sync::Arc<Database>>,
+    duckdb: State<std::sync::Arc<DuckDbEngine>>,
+    id: String,
+) -> Result<DataSourceSchema, AppError> {
+    let conn = db.conn.lock().unwrap();
+    let (name, file_path, file_format): (String, String, String) = conn.query_row(
+        "SELECT name, file_path, file_format FROM data_sources WHERE id = ?1",
+        rusqlite::params![id],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+    )?;
+    drop(conn);
+
+    let columns = duckdb
+        .columns_for_source(&file_path, &file_format)?
+        .into_iter()
+        .map(|(name, data_type)| DataSourceColumn { name, data_type })
+        .collect();
+
+    Ok(DataSourceSchema {
+        data_source_id: id,
+        name,
+        columns,
+    })
 }
 
 #[tauri::command]
