@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useAppState } from "@/hooks/useAppState";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,7 +20,20 @@ import {
   ALL_QUERY_TAB_PROJECTS,
   UNASSIGNED_QUERY_TAB_PROJECT,
   queryTabMatchesProjectFilter,
+  type QueryTabDropPosition,
 } from "@/hooks/useAppState";
+
+interface DropTarget {
+  id: string;
+  position: QueryTabDropPosition;
+}
+
+interface PointerDragState {
+  id: string;
+  startX: number;
+  startY: number;
+  isDragging: boolean;
+}
 
 export function QueryTabBar() {
   const {
@@ -33,6 +46,7 @@ export function QueryTabBar() {
     addQueryTab,
     closeQueryTab,
     renameQueryTab,
+    reorderQueryTab,
     setQueryTabProject,
     moveUnassignedQueryTabsToProject,
   } = useAppState();
@@ -87,6 +101,10 @@ export function QueryTabBar() {
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
+  const [draggingTabId, setDraggingTabId] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
+  const pointerDragRef = useRef<PointerDragState | null>(null);
+  const suppressClickRef = useRef(false);
 
   function startRename(id: string, currentName: string) {
     setEditingId(id);
@@ -102,6 +120,70 @@ export function QueryTabBar() {
 
   function handleAddTab() {
     addQueryTab(undefined, newTabProjectId);
+  }
+
+  function getPointerDropTarget(clientX: number, clientY: number): DropTarget | null {
+    const tabElement = document
+      .elementFromPoint(clientX, clientY)
+      ?.closest<HTMLElement>("[data-query-tab-id]");
+    if (!tabElement?.dataset.queryTabId) return null;
+
+    const rect = tabElement.getBoundingClientRect();
+    return {
+      id: tabElement.dataset.queryTabId,
+      position: clientX < rect.left + rect.width / 2 ? "before" : "after",
+    };
+  }
+
+  function handlePointerDown(e: React.PointerEvent<HTMLDivElement>, tabId: string) {
+    if (e.button !== 0) return;
+
+    pointerDragRef.current = {
+      id: tabId,
+      startX: e.clientX,
+      startY: e.clientY,
+      isDragging: false,
+    };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  }
+
+  function handlePointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    const dragState = pointerDragRef.current;
+    if (!dragState) return;
+
+    const distanceX = Math.abs(e.clientX - dragState.startX);
+    const distanceY = Math.abs(e.clientY - dragState.startY);
+    if (!dragState.isDragging && distanceX < 4 && distanceY < 4) return;
+
+    dragState.isDragging = true;
+    setDraggingTabId(dragState.id);
+    const target = getPointerDropTarget(e.clientX, e.clientY);
+    setDropTarget(target && target.id !== dragState.id ? target : null);
+    e.preventDefault();
+  }
+
+  function clearPointerDragState() {
+    pointerDragRef.current = null;
+    setDraggingTabId(null);
+    setDropTarget(null);
+  }
+
+  function handlePointerUp(e: React.PointerEvent<HTMLDivElement>) {
+    const dragState = pointerDragRef.current;
+    if (!dragState) return;
+
+    const target = getPointerDropTarget(e.clientX, e.clientY);
+    const shouldReorder = dragState.isDragging && target && target.id !== dragState.id;
+    clearPointerDragState();
+
+    if (shouldReorder) {
+      suppressClickRef.current = true;
+      reorderQueryTab(dragState.id, target.id, target.position);
+      window.setTimeout(() => {
+        suppressClickRef.current = false;
+      }, 0);
+      e.preventDefault();
+    }
   }
 
   return (
@@ -177,16 +259,37 @@ export function QueryTabBar() {
           const isActive = tab.id === activeQueryTabId;
           const isEditing = editingId === tab.id;
           const project = tab.projectId ? projectById.get(tab.projectId) : null;
+          const isDragging = draggingTabId === tab.id;
+          const isDropTarget = dropTarget?.id === tab.id && draggingTabId !== tab.id;
 
           return (
             <div
               key={tab.id}
-              className={`group flex items-center gap-1 px-2 py-1 rounded-t text-sm cursor-pointer border border-b-0 ${
+              data-query-tab-id={tab.id}
+              aria-grabbed={isDragging}
+              className={`group flex items-center gap-1 px-2 py-1 rounded-t text-sm cursor-pointer border border-b-0 transition-opacity ${
                 isActive
                   ? "bg-background border-border"
                   : "bg-muted/40 border-transparent hover:bg-muted/60"
+              } ${isDragging ? "opacity-50" : ""} ${
+                isDropTarget && dropTarget.position === "before"
+                  ? "border-l-2 border-l-primary"
+                  : ""
+              } ${
+                isDropTarget && dropTarget.position === "after"
+                  ? "border-r-2 border-r-primary"
+                  : ""
               }`}
-              onClick={() => setActiveQueryTab(tab.id)}
+              onClick={() => {
+                if (suppressClickRef.current) return;
+                setActiveQueryTab(tab.id);
+              }}
+              onPointerDown={(e) => {
+                if (!isEditing) handlePointerDown(e, tab.id);
+              }}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+              onPointerCancel={clearPointerDragState}
             >
               {isEditing ? (
                 <Input
@@ -201,6 +304,16 @@ export function QueryTabBar() {
                   autoFocus
                   onClick={(e) => e.stopPropagation()}
                 />
+              ) : draggingTabId ? (
+                <span
+                  className="truncate max-w-[120px] select-none"
+                  onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    startRename(tab.id, tab.name);
+                  }}
+                >
+                  {tab.name}
+                </span>
               ) : (
                 <TooltipProvider delayDuration={500}>
                   <Tooltip>
@@ -218,7 +331,7 @@ export function QueryTabBar() {
                     <TooltipContent side="bottom">
                       <p>
                         {project ? `${project.name} • ` : ""}
-                        Double-click to rename
+                        Drag to reorder • Double-click to rename
                       </p>
                     </TooltipContent>
                   </Tooltip>
@@ -232,6 +345,7 @@ export function QueryTabBar() {
               {queryTabs.length > 1 && (
                 <button
                   className="ml-1 text-muted-foreground hover:text-destructive text-xs leading-none opacity-0 group-hover:opacity-100 transition-opacity"
+                  onPointerDown={(e) => e.stopPropagation()}
                   onClick={(e) => {
                     e.stopPropagation();
                     closeQueryTab(tab.id);

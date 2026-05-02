@@ -24,6 +24,8 @@ export interface QueryTab {
   error: string | null;
 }
 
+export type QueryTabDropPosition = "before" | "after";
+
 export const ALL_QUERY_TAB_PROJECTS = "__all__";
 export const UNASSIGNED_QUERY_TAB_PROJECT = "__unassigned__";
 
@@ -70,6 +72,7 @@ interface AppState {
   addQueryTab: (sql?: string, projectId?: string | null) => void;
   closeQueryTab: (id: string) => void;
   renameQueryTab: (id: string, name: string) => void;
+  reorderQueryTab: (draggedId: string, targetId: string, position: QueryTabDropPosition) => void;
   setQueryTabProject: (id: string, projectId: string | null) => void;
   moveUnassignedQueryTabsToProject: (projectId: string) => void;
   clearQueryTabProject: (projectId: string) => void;
@@ -193,6 +196,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setQueryTabs((prev) => prev.map((t) => (t.id === id ? { ...t, name } : t)));
   }, []);
 
+  const reorderQueryTab = useCallback(
+    (draggedId: string, targetId: string, position: QueryTabDropPosition) => {
+      if (draggedId === targetId) return;
+
+      setQueryTabs((prev) => {
+        const draggedTab = prev.find((tab) => tab.id === draggedId);
+        if (!draggedTab) return prev;
+
+        const withoutDragged = prev.filter((tab) => tab.id !== draggedId);
+        const targetIndex = withoutDragged.findIndex((tab) => tab.id === targetId);
+        if (targetIndex < 0) return prev;
+
+        const insertIndex = position === "after" ? targetIndex + 1 : targetIndex;
+        return [
+          ...withoutDragged.slice(0, insertIndex),
+          draggedTab,
+          ...withoutDragged.slice(insertIndex),
+        ];
+      });
+    },
+    []
+  );
+
   const setQueryTabProject = useCallback((id: string, projectId: string | null) => {
     setQueryTabs((prev) => prev.map((t) => (t.id === id ? { ...t, projectId } : t)));
   }, []);
@@ -300,6 +326,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         addQueryTab,
         closeQueryTab,
         renameQueryTab,
+        reorderQueryTab,
         setQueryTabProject,
         moveUnassignedQueryTabsToProject,
         clearQueryTabProject,
