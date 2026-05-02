@@ -1,5 +1,10 @@
 import { useRef, useEffect, useCallback } from "react";
-import { EditorView, keymap, placeholder as phPlugin } from "@codemirror/view";
+import {
+  EditorView,
+  keymap,
+  lineNumbers,
+  placeholder as phPlugin,
+} from "@codemirror/view";
 import { EditorState } from "@codemirror/state";
 import { sql, PostgreSQL } from "@codemirror/lang-sql";
 import { oneDark } from "@codemirror/theme-one-dark";
@@ -74,6 +79,7 @@ export function SqlEditor({
       closeBrackets(),
       phPlugin(placeholder),
       updateListener,
+      lineNumbers(),
       EditorView.lineWrapping,
       EditorView.theme({
         "&": {
@@ -92,6 +98,15 @@ export function SqlEditor({
         },
         ".cm-content": {
           padding: "8px 0",
+        },
+        ".cm-gutters": {
+          backgroundColor: "hsl(var(--muted) / 0.35)",
+          borderRight: "1px solid hsl(var(--border))",
+          color: "hsl(var(--muted-foreground))",
+        },
+        ".cm-lineNumbers .cm-gutterElement": {
+          minWidth: "2.5rem",
+          padding: "0 8px",
         },
         ".cm-line": {
           padding: "0 12px",

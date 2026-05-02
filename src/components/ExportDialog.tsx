@@ -23,9 +23,10 @@ interface Props {
   open: boolean;
   onClose: () => void;
   sql: string;
+  resultTableName?: string | null;
 }
 
-export function ExportDialog({ open: isOpen, onClose, sql }: Props) {
+export function ExportDialog({ open: isOpen, onClose, sql, resultTableName }: Props) {
   const [format, setFormat] = useState("parquet");
   const [destPath, setDestPath] = useState("");
   const [loading, setLoading] = useState(false);
@@ -54,7 +55,7 @@ export function ExportDialog({ open: isOpen, onClose, sql }: Props) {
     setError(null);
     setSuccess(null);
     try {
-      const path = await exportResults(sql, format, destPath);
+      const path = await exportResults(sql, format, destPath, resultTableName);
       setSuccess(`Exported to ${path}`);
     } catch (e) {
       setError(String(e));

@@ -12,6 +12,7 @@ pub fn export_results(
     sql: String,
     format: String,
     destination_path: String,
+    result_table_name: Option<String>,
 ) -> Result<String, AppError> {
     let dest = Path::new(&destination_path);
 
@@ -44,14 +45,25 @@ pub fn export_results(
         }
     }
 
-    // Wrap the user SQL with CTEs for data source resolution
-    let wrapped_sql = duckdb.wrap_query(&sql)?;
+    // Prefer the already-materialized result table from query execution. Fall
+    // back to SQL for older callers or exports initiated without a result set.
+    let export_sql = if let Some(table_name) = result_table_name.as_deref() {
+        duckdb.retained_result_table_query(table_name)?
+    } else {
+        duckdb.wrap_query_for_embedding(&sql)?
+    };
 
     // Build the COPY ... TO ... query
     let escaped_dest = destination_path.replace('\'', "''");
     let copy_sql = match format.as_str() {
-        "parquet" => format!("COPY ({}) TO '{}' (FORMAT PARQUET)", wrapped_sql, escaped_dest),
-        "csv" => format!("COPY ({}) TO '{}' (FORMAT CSV, HEADER)", wrapped_sql, escaped_dest),
+        "parquet" => format!(
+            "COPY ({}) TO '{}' (FORMAT PARQUET)",
+            export_sql, escaped_dest
+        ),
+        "csv" => format!(
+            "COPY ({}) TO '{}' (FORMAT CSV, HEADER)",
+            export_sql, escaped_dest
+        ),
         _ => {
             return Err(AppError::General(format!(
                 "Unsupported export format: {}. Use 'parquet' or 'csv'.",

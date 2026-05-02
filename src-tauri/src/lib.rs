@@ -68,6 +68,7 @@ pub fn run() {
             list_projects,
             execute_query,
             cancel_query,
+            release_query_result,
             get_standalone_sql,
             get_query_history,
             clear_query_history,

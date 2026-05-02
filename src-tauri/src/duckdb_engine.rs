@@ -1,5 +1,5 @@
 use duckdb::{Connection, InterruptHandle};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
 use crate::error::AppError;
@@ -16,6 +16,7 @@ pub struct DuckDbEngine {
     /// Used to build CTE-prefixed queries that bypass catalog resolution.
     sources: Mutex<HashMap<String, SourceInfo>>,
     active_query: Mutex<Option<Arc<InterruptHandle>>>,
+    retained_result_tables: Mutex<HashSet<String>>,
 }
 
 pub struct ActiveQueryGuard<'a> {
@@ -35,6 +36,7 @@ impl DuckDbEngine {
             conn: Mutex::new(conn),
             sources: Mutex::new(HashMap::new()),
             active_query: Mutex::new(None),
+            retained_result_tables: Mutex::new(HashSet::new()),
         })
     }
 
@@ -61,9 +63,10 @@ impl DuckDbEngine {
         match file_format {
             "parquet" => Ok(format!("read_parquet('{}')", file_path.replace('\'', "''"))),
             "csv" => Ok(format!("read_csv('{}')", file_path.replace('\'', "''"))),
-            "json" | "jsonl" | "ndjson" => {
-                Ok(format!("read_json_auto('{}')", file_path.replace('\'', "''")))
-            }
+            "json" | "jsonl" | "ndjson" => Ok(format!(
+                "read_json_auto('{}')",
+                file_path.replace('\'', "''")
+            )),
             _ => Err(AppError::General(format!(
                 "Unsupported file format: {}",
                 file_format
@@ -118,7 +121,10 @@ impl DuckDbEngine {
         let trimmed = user_sql.trim_start();
         let sql = if trimmed.len() >= 4
             && trimmed[..4].eq_ignore_ascii_case("with")
-            && trimmed.as_bytes().get(4).map_or(false, |b| b.is_ascii_whitespace())
+            && trimmed
+                .as_bytes()
+                .get(4)
+                .map_or(false, |b| b.is_ascii_whitespace())
         {
             // Replace the leading WITH with our CTEs + comma
             format!("WITH {}, {}", cte_block, &trimmed[4..].trim_start())
@@ -127,6 +133,92 @@ impl DuckDbEngine {
         };
 
         Ok(sql)
+    }
+
+    /// Return SQL that can be embedded inside another statement, such as
+    /// `COPY (<query>) TO ...` or `CREATE TABLE AS <query>`.
+    pub fn wrap_query_for_embedding(&self, user_sql: &str) -> Result<String, AppError> {
+        let wrapped_sql = self.wrap_query(user_sql)?;
+        Ok(Self::trim_trailing_statement_terminators(&wrapped_sql).to_string())
+    }
+
+    fn trim_trailing_statement_terminators(sql: &str) -> &str {
+        let mut trimmed = sql.trim_end();
+        while let Some(without_semicolon) = trimmed.strip_suffix(';') {
+            trimmed = without_semicolon.trim_end();
+        }
+        trimmed
+    }
+
+    fn quote_identifier(identifier: &str) -> String {
+        format!("\"{}\"", identifier.replace('"', "\"\""))
+    }
+
+    fn is_retained_result_table_name(table_name: &str) -> bool {
+        table_name.starts_with("__qr_")
+            && table_name
+                .chars()
+                .all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
+    }
+
+    pub fn retain_result_table(&self, table_name: &str) -> Result<(), AppError> {
+        if !Self::is_retained_result_table_name(table_name) {
+            return Err(AppError::General(format!(
+                "Invalid query result table name: {}",
+                table_name
+            )));
+        }
+        self.retained_result_tables
+            .lock()
+            .unwrap()
+            .insert(table_name.to_string());
+        Ok(())
+    }
+
+    pub fn retained_result_table_query(&self, table_name: &str) -> Result<String, AppError> {
+        if !Self::is_retained_result_table_name(table_name) {
+            return Err(AppError::General(format!(
+                "Invalid query result table name: {}",
+                table_name
+            )));
+        }
+        if !self
+            .retained_result_tables
+            .lock()
+            .unwrap()
+            .contains(table_name)
+        {
+            return Err(AppError::General(
+                "The query result is no longer available. Run the query again before exporting."
+                    .to_string(),
+            ));
+        }
+        Ok(format!(
+            "SELECT * FROM {}",
+            Self::quote_identifier(table_name)
+        ))
+    }
+
+    pub fn release_result_table(&self, table_name: &str) -> Result<bool, AppError> {
+        if !Self::is_retained_result_table_name(table_name) {
+            return Err(AppError::General(format!(
+                "Invalid query result table name: {}",
+                table_name
+            )));
+        }
+        let removed = self
+            .retained_result_tables
+            .lock()
+            .unwrap()
+            .remove(table_name);
+        if removed {
+            let conn = self.conn.lock().unwrap();
+            conn.execute_batch(&format!(
+                "DROP TABLE IF EXISTS {}",
+                Self::quote_identifier(table_name)
+            ))?;
+        }
+        Ok(removed)
     }
 
     /// Replace all registered table name references in the SQL with inline
@@ -182,5 +274,54 @@ impl DuckDbEngine {
         }
 
         Ok(result)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::DuckDbEngine;
+
+    #[test]
+    fn trims_trailing_statement_terminators_for_embedded_queries() {
+        assert_eq!(
+            DuckDbEngine::trim_trailing_statement_terminators("SELECT ';' AS value;\n  "),
+            "SELECT ';' AS value"
+        );
+        assert_eq!(
+            DuckDbEngine::trim_trailing_statement_terminators("SELECT 1;;  "),
+            "SELECT 1"
+        );
+        assert_eq!(
+            DuckDbEngine::trim_trailing_statement_terminators("SELECT 1"),
+            "SELECT 1"
+        );
+    }
+
+    #[test]
+    fn query_with_trailing_semicolon_can_be_used_in_copy() {
+        let engine = DuckDbEngine::new().unwrap();
+        let wrapped_sql = engine
+            .wrap_query_for_embedding(
+                "WITH values_to_export AS (SELECT 1 AS id) SELECT * FROM values_to_export;",
+            )
+            .unwrap();
+        let destination = std::env::temp_dir().join(format!(
+            "data_explorer_export_semicolon_{}.csv",
+            uuid::Uuid::new_v4().simple()
+        ));
+        let destination_sql = destination.to_string_lossy().replace('\'', "''");
+        let copy_sql = format!(
+            "COPY ({}) TO '{}' (FORMAT CSV, HEADER)",
+            wrapped_sql, destination_sql
+        );
+
+        {
+            let conn = engine.conn.lock().unwrap();
+            conn.execute_batch(&copy_sql).unwrap();
+        }
+
+        let exported = std::fs::read_to_string(&destination).unwrap();
+        std::fs::remove_file(destination).unwrap();
+        assert_eq!(exported, "id\n1\n");
     }
 }

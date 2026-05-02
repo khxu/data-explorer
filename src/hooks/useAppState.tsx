@@ -10,6 +10,7 @@ import {
   listProjects,
   getQueryHistory,
   loadQueryTabs,
+  releaseQueryResult,
   saveQueryTabs,
   type SavedQueryTab,
 } from "@/lib/api";
@@ -177,11 +178,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [activeProject, queryTabProjectFilter]);
 
   const closeQueryTab = useCallback((id: string) => {
+    const tab = queryTabs.find((t) => t.id === id);
+    if (queryTabs.length <= 1) return;
+    if (tab?.result?.export_table_name) {
+      releaseQueryResult(tab.result.export_table_name).catch(() => {});
+    }
     setQueryTabs((prev) => {
       if (prev.length <= 1) return prev; // don't close the last tab
       return prev.filter((t) => t.id !== id);
     });
-  }, []);
+  }, [queryTabs]);
 
   const renameQueryTab = useCallback((id: string, name: string) => {
     setQueryTabs((prev) => prev.map((t) => (t.id === id ? { ...t, name } : t)));

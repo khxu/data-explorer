@@ -119,6 +119,7 @@ export interface QueryResult {
   rows: unknown[][];
   row_count: number;
   execution_time_ms: number;
+  export_table_name: string | null;
 }
 
 export interface QueryHistoryEntry {
@@ -138,6 +139,10 @@ export async function executeQuery(sql: string): Promise<QueryResult> {
 
 export async function cancelQuery(): Promise<boolean> {
   return invoke("cancel_query");
+}
+
+export async function releaseQueryResult(exportTableName: string): Promise<boolean> {
+  return invoke("release_query_result", { exportTableName });
 }
 
 export async function getStandaloneSql(sql: string): Promise<string> {
@@ -182,7 +187,13 @@ export async function saveQueryTabs(tabs: SavedQueryTab[]): Promise<void> {
 export async function exportResults(
   sql: string,
   format: string,
-  destinationPath: string
+  destinationPath: string,
+  resultTableName?: string | null
 ): Promise<string> {
-  return invoke("export_results", { sql, format, destinationPath });
+  return invoke("export_results", {
+    sql,
+    format,
+    destinationPath,
+    resultTableName: resultTableName ?? null,
+  });
 }

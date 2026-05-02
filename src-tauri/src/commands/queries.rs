@@ -14,6 +14,7 @@ pub struct QueryResult {
     pub rows: Vec<Vec<serde_json::Value>>,
     pub row_count: usize,
     pub execution_time_ms: u64,
+    pub export_table_name: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -40,12 +41,9 @@ fn truncate_value(val: &serde_json::Value) -> serde_json::Value {
     }
 }
 
-fn execute_duckdb_query(
-    duckdb: &DuckDbEngine,
-    sql: &str,
-) -> Result<QueryResult, AppError> {
+fn execute_duckdb_query(duckdb: &DuckDbEngine, sql: &str) -> Result<QueryResult, AppError> {
     // Wrap user SQL with CTEs for all registered data sources.
-    let wrapped_sql = duckdb.wrap_query(sql)?;
+    let wrapped_sql = duckdb.wrap_query_for_embedding(sql)?;
 
     let conn = duckdb.conn.lock().unwrap();
     let _active_query = duckdb.activate_query(conn.interrupt_handle());
@@ -55,15 +53,9 @@ fn execute_duckdb_query(
     // Workaround: use execute_batch (which goes through duckdb_query_arrow and
     // works correctly) to materialize results into a temp table, then read
     // from that table with a trivial SELECT that prepare() can handle.
-    let temp_table = format!(
-        "__qr_{}",
-        uuid::Uuid::new_v4().simple()
-    );
+    let temp_table = format!("__qr_{}", uuid::Uuid::new_v4().simple());
 
-    let create_sql = format!(
-        "CREATE TEMP TABLE \"{}\" AS {}",
-        temp_table, wrapped_sql
-    );
+    let create_sql = format!("CREATE TEMP TABLE \"{}\" AS {}", temp_table, wrapped_sql);
 
     let start = Instant::now();
     conn.execute_batch(&create_sql)?;
@@ -108,8 +100,7 @@ fn execute_duckdb_query(
 
     drop(stmt);
 
-    // Clean up temp table
-    let _ = conn.execute_batch(&format!("DROP TABLE IF EXISTS \"{}\"", temp_table));
+    duckdb.retain_result_table(&temp_table)?;
 
     Ok(QueryResult {
         columns,
@@ -117,6 +108,7 @@ fn execute_duckdb_query(
         row_count: rows.len(),
         rows,
         execution_time_ms: elapsed,
+        export_table_name: Some(temp_table),
     })
 }
 
@@ -204,6 +196,14 @@ pub fn cancel_query(duckdb: State<std::sync::Arc<DuckDbEngine>>) -> Result<bool,
 }
 
 #[tauri::command]
+pub fn release_query_result(
+    duckdb: State<std::sync::Arc<DuckDbEngine>>,
+    export_table_name: String,
+) -> Result<bool, AppError> {
+    duckdb.release_result_table(&export_table_name)
+}
+
+#[tauri::command]
 pub fn get_standalone_sql(
     db: State<std::sync::Arc<Database>>,
     duckdb: State<std::sync::Arc<DuckDbEngine>>,
@@ -281,7 +281,9 @@ pub struct SavedQueryTab {
 }
 
 #[tauri::command]
-pub fn load_query_tabs(db: State<std::sync::Arc<Database>>) -> Result<Vec<SavedQueryTab>, AppError> {
+pub fn load_query_tabs(
+    db: State<std::sync::Arc<Database>>,
+) -> Result<Vec<SavedQueryTab>, AppError> {
     let conn = db.conn.lock().unwrap();
     let mut stmt = conn.prepare(
         "SELECT id, name, sql_text, project_id, sort_order, is_active FROM query_tabs ORDER BY sort_order",

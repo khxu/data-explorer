@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppState } from "@/hooks/useAppState";
-import { cancelQuery, executeQuery, getStandaloneSql } from "@/lib/api";
+import { cancelQuery, executeQuery, getStandaloneSql, releaseQueryResult } from "@/lib/api";
 import { ExportDialog } from "./ExportDialog";
 import { ResizableResultsTable } from "./ResizableResultsTable";
 import { SqlEditor } from "./SqlEditor";
@@ -68,14 +68,24 @@ export function QueryEditor() {
 
   async function handleRun() {
     if (!sql.trim()) return;
+    const previousExportTableName = result?.export_table_name;
     setRunning(true);
     updateQueryTab(tabId, { error: null });
     try {
-      const result = await executeQuery(sql);
-      updateQueryTab(tabId, { result });
+      const nextResult = await executeQuery(sql);
+      updateQueryTab(tabId, { result: nextResult });
+      if (
+        previousExportTableName &&
+        previousExportTableName !== nextResult.export_table_name
+      ) {
+        releaseQueryResult(previousExportTableName).catch(() => {});
+      }
       await refreshHistory();
     } catch (e) {
       updateQueryTab(tabId, { error: String(e), result: null });
+      if (previousExportTableName) {
+        releaseQueryResult(previousExportTableName).catch(() => {});
+      }
     } finally {
       setCanceling(false);
       setRunning(false);
@@ -200,6 +210,7 @@ export function QueryEditor() {
         open={showExport}
         onClose={() => setShowExport(false)}
         sql={sql}
+        resultTableName={result?.export_table_name}
       />
     </div>
   );
