@@ -1,6 +1,6 @@
-use duckdb::Connection;
+use duckdb::{Connection, InterruptHandle};
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use crate::error::AppError;
 
@@ -15,6 +15,17 @@ pub struct DuckDbEngine {
     /// Registered data sources: name → (file_path, file_format).
     /// Used to build CTE-prefixed queries that bypass catalog resolution.
     sources: Mutex<HashMap<String, SourceInfo>>,
+    active_query: Mutex<Option<Arc<InterruptHandle>>>,
+}
+
+pub struct ActiveQueryGuard<'a> {
+    engine: &'a DuckDbEngine,
+}
+
+impl Drop for ActiveQueryGuard<'_> {
+    fn drop(&mut self) {
+        self.engine.clear_active_query();
+    }
 }
 
 impl DuckDbEngine {
@@ -23,7 +34,27 @@ impl DuckDbEngine {
         Ok(Self {
             conn: Mutex::new(conn),
             sources: Mutex::new(HashMap::new()),
+            active_query: Mutex::new(None),
         })
+    }
+
+    pub fn activate_query(&self, interrupt_handle: Arc<InterruptHandle>) -> ActiveQueryGuard<'_> {
+        *self.active_query.lock().unwrap() = Some(interrupt_handle);
+        ActiveQueryGuard { engine: self }
+    }
+
+    pub fn cancel_active_query(&self) -> bool {
+        let active_query = self.active_query.lock().unwrap().clone();
+        if let Some(interrupt_handle) = active_query {
+            interrupt_handle.interrupt();
+            true
+        } else {
+            false
+        }
+    }
+
+    fn clear_active_query(&self) {
+        *self.active_query.lock().unwrap() = None;
     }
 
     fn read_fn_for(file_path: &str, file_format: &str) -> Result<String, AppError> {

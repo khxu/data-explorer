@@ -128,3 +128,16 @@
     @apply font-sans;
     }
 }
+
+@keyframes query-progress {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}
+
+.query-progress-indicator {
+  animation: query-progress 1.2s ease-in-out infinite;
+}

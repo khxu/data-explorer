@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use std::time::Instant;
 use tauri::State;
 
@@ -47,6 +48,7 @@ fn execute_duckdb_query(
     let wrapped_sql = duckdb.wrap_query(sql)?;
 
     let conn = duckdb.conn.lock().unwrap();
+    let _active_query = duckdb.activate_query(conn.interrupt_handle());
 
     // The duckdb crate's conn.prepare() uses duckdb_extract_statements which
     // has a bug where CTEs + WHERE clauses fail with "Table does not exist".
@@ -133,13 +135,12 @@ fn duckdb_value_to_json(val: duckdb::types::Value) -> serde_json::Value {
     }
 }
 
-#[tauri::command]
-pub fn execute_query(
-    db: State<Database>,
-    duckdb: State<DuckDbEngine>,
+fn execute_query_blocking(
+    db: &Database,
+    duckdb: &DuckDbEngine,
     sql: String,
 ) -> Result<QueryResult, AppError> {
-    let result = execute_duckdb_query(&duckdb, &sql);
+    let result = execute_duckdb_query(duckdb, &sql);
 
     // Log to history
     let history_id = uuid::Uuid::new_v4().to_string();
@@ -185,9 +186,27 @@ pub fn execute_query(
 }
 
 #[tauri::command]
+pub async fn execute_query(
+    db: State<'_, Arc<Database>>,
+    duckdb: State<'_, Arc<DuckDbEngine>>,
+    sql: String,
+) -> Result<QueryResult, AppError> {
+    let db = db.inner().clone();
+    let duckdb = duckdb.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || execute_query_blocking(&db, &duckdb, sql))
+        .await
+        .map_err(|e| AppError::General(format!("Query task failed: {}", e)))?
+}
+
+#[tauri::command]
+pub fn cancel_query(duckdb: State<std::sync::Arc<DuckDbEngine>>) -> Result<bool, AppError> {
+    Ok(duckdb.cancel_active_query())
+}
+
+#[tauri::command]
 pub fn get_standalone_sql(
-    db: State<Database>,
-    duckdb: State<DuckDbEngine>,
+    db: State<std::sync::Arc<Database>>,
+    duckdb: State<std::sync::Arc<DuckDbEngine>>,
     sql: String,
 ) -> Result<String, AppError> {
     // Ensure the in-memory source registry is fully up-to-date from SQLite
@@ -206,7 +225,7 @@ pub fn get_standalone_sql(
 
 #[tauri::command]
 pub fn clear_query_history(
-    db: State<Database>,
+    db: State<std::sync::Arc<Database>>,
     before: Option<String>,
 ) -> Result<u64, AppError> {
     let conn = db.conn.lock().unwrap();
@@ -223,7 +242,7 @@ pub fn clear_query_history(
 
 #[tauri::command]
 pub fn get_query_history(
-    db: State<Database>,
+    db: State<std::sync::Arc<Database>>,
     limit: Option<i64>,
     offset: Option<i64>,
 ) -> Result<Vec<QueryHistoryEntry>, AppError> {
@@ -262,7 +281,7 @@ pub struct SavedQueryTab {
 }
 
 #[tauri::command]
-pub fn load_query_tabs(db: State<Database>) -> Result<Vec<SavedQueryTab>, AppError> {
+pub fn load_query_tabs(db: State<std::sync::Arc<Database>>) -> Result<Vec<SavedQueryTab>, AppError> {
     let conn = db.conn.lock().unwrap();
     let mut stmt = conn.prepare(
         "SELECT id, name, sql_text, project_id, sort_order, is_active FROM query_tabs ORDER BY sort_order",
@@ -282,7 +301,7 @@ pub fn load_query_tabs(db: State<Database>) -> Result<Vec<SavedQueryTab>, AppErr
 
 #[tauri::command]
 pub fn save_query_tabs(
-    db: State<Database>,
+    db: State<std::sync::Arc<Database>>,
     tabs: Vec<SavedQueryTab>,
 ) -> Result<(), AppError> {
     let conn = db.conn.lock().unwrap();

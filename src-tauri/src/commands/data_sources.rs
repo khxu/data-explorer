@@ -29,8 +29,8 @@ fn detect_format(file_path: &str) -> Option<String> {
 
 #[tauri::command]
 pub fn register_data_source(
-    db: State<Database>,
-    duckdb: State<DuckDbEngine>,
+    db: State<std::sync::Arc<Database>>,
+    duckdb: State<std::sync::Arc<DuckDbEngine>>,
     name: String,
     file_path: String,
 ) -> Result<DataSource, AppError> {
@@ -69,8 +69,8 @@ pub fn register_data_source(
 
 #[tauri::command]
 pub fn remove_data_source(
-    db: State<Database>,
-    duckdb: State<DuckDbEngine>,
+    db: State<std::sync::Arc<Database>>,
+    duckdb: State<std::sync::Arc<DuckDbEngine>>,
     id: String,
 ) -> Result<(), AppError> {
     let conn = db.conn.lock().unwrap();
@@ -91,8 +91,8 @@ pub fn remove_data_source(
 
 #[tauri::command]
 pub fn refresh_data_source(
-    db: State<Database>,
-    duckdb: State<DuckDbEngine>,
+    db: State<std::sync::Arc<Database>>,
+    duckdb: State<std::sync::Arc<DuckDbEngine>>,
     id: String,
 ) -> Result<(), AppError> {
     let conn = db.conn.lock().unwrap();
@@ -108,8 +108,8 @@ pub fn refresh_data_source(
 
 #[tauri::command]
 pub fn refresh_all_data_sources(
-    db: State<Database>,
-    duckdb: State<DuckDbEngine>,
+    db: State<std::sync::Arc<Database>>,
+    duckdb: State<std::sync::Arc<DuckDbEngine>>,
 ) -> Result<(), AppError> {
     let conn = db.conn.lock().unwrap();
     let mut stmt = conn.prepare("SELECT name, file_path, file_format FROM data_sources")?;
@@ -126,7 +126,7 @@ pub fn refresh_all_data_sources(
 
 #[tauri::command]
 pub fn list_data_sources(
-    db: State<Database>,
+    db: State<std::sync::Arc<Database>>,
     tag_ids: Option<Vec<String>>,
 ) -> Result<Vec<DataSource>, AppError> {
     let conn = db.conn.lock().unwrap();

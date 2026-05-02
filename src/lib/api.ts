@@ -136,6 +136,10 @@ export async function executeQuery(sql: string): Promise<QueryResult> {
   return invoke("execute_query", { sql });
 }
 
+export async function cancelQuery(): Promise<boolean> {
+  return invoke("cancel_query");
+}
+
 export async function getStandaloneSql(sql: string): Promise<string> {
   return invoke("get_standalone_sql", { sql });
 }

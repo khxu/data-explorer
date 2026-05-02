@@ -7,8 +7,8 @@ use crate::error::AppError;
 
 #[tauri::command]
 pub fn export_results(
-    db: State<Database>,
-    duckdb: State<DuckDbEngine>,
+    db: State<std::sync::Arc<Database>>,
+    duckdb: State<std::sync::Arc<DuckDbEngine>>,
     sql: String,
     format: String,
     destination_path: String,

@@ -3,6 +3,7 @@ mod db;
 mod duckdb_engine;
 mod error;
 
+use std::sync::Arc;
 use tauri::Manager;
 
 use db::Database;
@@ -46,8 +47,8 @@ pub fn run() {
                 }
             }
 
-            app.manage(database);
-            app.manage(duckdb);
+            app.manage(Arc::new(database));
+            app.manage(Arc::new(duckdb));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -66,6 +67,7 @@ pub fn run() {
             delete_project,
             list_projects,
             execute_query,
+            cancel_query,
             get_standalone_sql,
             get_query_history,
             clear_query_history,

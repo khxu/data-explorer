@@ -14,7 +14,7 @@ pub struct Tag {
 
 #[tauri::command]
 pub fn create_tag(
-    db: State<Database>,
+    db: State<std::sync::Arc<Database>>,
     name: String,
     color: Option<String>,
 ) -> Result<Tag, AppError> {
@@ -33,14 +33,14 @@ pub fn create_tag(
 }
 
 #[tauri::command]
-pub fn delete_tag(db: State<Database>, id: String) -> Result<(), AppError> {
+pub fn delete_tag(db: State<std::sync::Arc<Database>>, id: String) -> Result<(), AppError> {
     let conn = db.conn.lock().unwrap();
     conn.execute("DELETE FROM tags WHERE id = ?1", rusqlite::params![id])?;
     Ok(())
 }
 
 #[tauri::command]
-pub fn list_tags(db: State<Database>) -> Result<Vec<Tag>, AppError> {
+pub fn list_tags(db: State<std::sync::Arc<Database>>) -> Result<Vec<Tag>, AppError> {
     let conn = db.conn.lock().unwrap();
     let mut stmt = conn.prepare("SELECT id, name, color, created_at FROM tags ORDER BY name")?;
     let rows = stmt.query_map([], |row| {
@@ -56,7 +56,7 @@ pub fn list_tags(db: State<Database>) -> Result<Vec<Tag>, AppError> {
 
 #[tauri::command]
 pub fn assign_tags(
-    db: State<Database>,
+    db: State<std::sync::Arc<Database>>,
     data_source_id: String,
     tag_ids: Vec<String>,
 ) -> Result<(), AppError> {
@@ -72,7 +72,7 @@ pub fn assign_tags(
 
 #[tauri::command]
 pub fn remove_tags(
-    db: State<Database>,
+    db: State<std::sync::Arc<Database>>,
     data_source_id: String,
     tag_ids: Vec<String>,
 ) -> Result<(), AppError> {

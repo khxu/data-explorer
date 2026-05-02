@@ -16,7 +16,7 @@ pub struct Project {
 
 #[tauri::command]
 pub fn create_project(
-    db: State<Database>,
+    db: State<std::sync::Arc<Database>>,
     name: String,
     description: Option<String>,
     tag_filter: Vec<String>,
@@ -40,7 +40,7 @@ pub fn create_project(
 
 #[tauri::command]
 pub fn update_project(
-    db: State<Database>,
+    db: State<std::sync::Arc<Database>>,
     id: String,
     name: String,
     description: Option<String>,
@@ -56,7 +56,7 @@ pub fn update_project(
 }
 
 #[tauri::command]
-pub fn delete_project(db: State<Database>, id: String) -> Result<(), AppError> {
+pub fn delete_project(db: State<std::sync::Arc<Database>>, id: String) -> Result<(), AppError> {
     let conn = db.conn.lock().unwrap();
     conn.execute(
         "DELETE FROM projects WHERE id = ?1",
@@ -66,7 +66,7 @@ pub fn delete_project(db: State<Database>, id: String) -> Result<(), AppError> {
 }
 
 #[tauri::command]
-pub fn list_projects(db: State<Database>) -> Result<Vec<Project>, AppError> {
+pub fn list_projects(db: State<std::sync::Arc<Database>>) -> Result<Vec<Project>, AppError> {
     let conn = db.conn.lock().unwrap();
     let mut stmt =
         conn.prepare("SELECT id, name, description, tag_filter, created_at, updated_at FROM projects ORDER BY name")?;

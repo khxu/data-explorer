@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppState } from "@/hooks/useAppState";
-import { executeQuery, getStandaloneSql } from "@/lib/api";
+import { cancelQuery, executeQuery, getStandaloneSql } from "@/lib/api";
 import { ExportDialog } from "./ExportDialog";
 import { ResizableResultsTable } from "./ResizableResultsTable";
 import { SqlEditor } from "./SqlEditor";
@@ -21,8 +21,22 @@ export function QueryEditor() {
     refreshHistory,
   } = useAppState();
   const [running, setRunning] = useState(false);
+  const [canceling, setCanceling] = useState(false);
+  const [elapsedMs, setElapsedMs] = useState(0);
   const [showExport, setShowExport] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!running) return;
+
+    const startedAt = performance.now();
+    setElapsedMs(0);
+    const timer = window.setInterval(() => {
+      setElapsedMs(performance.now() - startedAt);
+    }, 100);
+
+    return () => window.clearInterval(timer);
+  }, [running]);
 
   const tab = queryTabs.find((t) => t.id === activeQueryTabId);
   if (!tab || !queryTabMatchesProjectFilter(tab, queryTabProjectFilter)) {
@@ -50,6 +64,7 @@ export function QueryEditor() {
   const sql = tab.sql;
   const result = tab.result;
   const queryError = tab.error;
+  const elapsedLabel = formatElapsed(elapsedMs);
 
   async function handleRun() {
     if (!sql.trim()) return;
@@ -62,7 +77,22 @@ export function QueryEditor() {
     } catch (e) {
       updateQueryTab(tabId, { error: String(e), result: null });
     } finally {
+      setCanceling(false);
       setRunning(false);
+    }
+  }
+
+  async function handleCancel() {
+    if (!running || canceling) return;
+    setCanceling(true);
+    try {
+      const cancelled = await cancelQuery();
+      if (!cancelled) {
+        setCanceling(false);
+      }
+    } catch (e) {
+      updateQueryTab(tabId, { error: String(e) });
+      setCanceling(false);
     }
   }
 
@@ -90,8 +120,18 @@ export function QueryEditor() {
         <div className="flex items-center justify-between">
           <div className="flex gap-2">
             <Button onClick={handleRun} disabled={running || !sql.trim()} size="sm">
-              {running ? "Running..." : "▶ Run"}
+              {running ? `Running ${elapsedLabel}` : "▶ Run"}
             </Button>
+            {running && (
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={handleCancel}
+                disabled={canceling}
+              >
+                {canceling ? "Canceling..." : "Cancel"}
+              </Button>
+            )}
             {result && (
               <Button
                 variant="outline"
@@ -113,6 +153,20 @@ export function QueryEditor() {
           </div>
           <span className="text-xs text-muted-foreground">⌘+Enter to run</span>
         </div>
+        {running && (
+          <div className="space-y-1" role="status" aria-live="polite">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>DuckDB query in progress</span>
+              <span>{elapsedLabel}</span>
+            </div>
+            <div
+              className="h-1.5 overflow-hidden rounded-full bg-muted"
+              aria-label="Query progress"
+            >
+              <div className="query-progress-indicator h-full w-1/3 rounded-full bg-primary" />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Error */}
@@ -135,7 +189,7 @@ export function QueryEditor() {
         </div>
       )}
 
-      {!result && !queryError && (
+      {!result && !queryError && !running && (
         <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
           Write a query and press Run to see results
         </div>
@@ -149,4 +203,20 @@ export function QueryEditor() {
       />
     </div>
   );
+}
+
+function formatElapsed(ms: number) {
+  const totalSeconds = ms / 1000;
+  if (totalSeconds < 10) {
+    return `${totalSeconds.toFixed(1)}s`;
+  }
+
+  const roundedSeconds = Math.floor(totalSeconds);
+  const minutes = Math.floor(roundedSeconds / 60);
+  const seconds = roundedSeconds % 60;
+  if (minutes === 0) {
+    return `${seconds}s`;
+  }
+
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
