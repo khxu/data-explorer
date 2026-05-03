@@ -8,7 +8,7 @@ Built with [Tauri v2](https://tauri.app/) + React + TypeScript on the frontend a
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) (v18+)
+- [Node.js](https://nodejs.org/) (v24+)
 - [Rust](https://www.rust-lang.org/tools/install) (stable)
 - Tauri v2 system dependencies — see the [Tauri prerequisites guide](https://v2.tauri.app/start/prerequisites/)
 
