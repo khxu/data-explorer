@@ -19,6 +19,19 @@ pub struct DuckDbEngine {
     retained_result_tables: Mutex<HashSet<String>>,
 }
 
+#[derive(Debug, Clone)]
+enum SqlTokenKind {
+    Word { value: String, quoted: bool },
+    Symbol(char),
+}
+
+#[derive(Debug, Clone)]
+struct SqlToken {
+    kind: SqlTokenKind,
+    start: usize,
+    end: usize,
+}
+
 pub struct ActiveQueryGuard<'a> {
     engine: &'a DuckDbEngine,
 }
@@ -244,60 +257,274 @@ impl DuckDbEngine {
         Ok(removed)
     }
 
-    /// Replace all registered table name references in the SQL with inline
-    /// read_parquet/read_csv/read_json_auto calls. This produces fully
-    /// self-contained SQL that can run in the DuckDB CLI without any CTEs.
+    /// Replace registered source references in relation positions with inline
+    /// read_parquet/read_csv/read_json_auto calls. Column qualifiers keep using
+    /// the original source name through an alias on the table function.
     pub fn inline_sources(&self, user_sql: &str) -> Result<String, AppError> {
         let sources = self.sources.lock().unwrap();
         if sources.is_empty() {
             return Ok(user_sql.to_string());
         }
 
-        // Sort by name length descending so longer names are replaced first,
-        // preventing partial matches (e.g., "rs_graph_document" matching inside
-        // "rs_graph_document_repository_link")
-        let mut sorted: Vec<(&String, &SourceInfo)> = sources.iter().collect();
-        sorted.sort_by(|a, b| b.0.len().cmp(&a.0.len()));
+        let source_lookup: HashMap<String, (&String, &SourceInfo)> = sources
+            .iter()
+            .map(|(name, info)| (name.to_ascii_lowercase(), (name, info)))
+            .collect();
+        let tokens = Self::tokenize_sql(user_sql);
+        let mut replacements: Vec<(usize, usize, String)> = Vec::new();
 
-        let mut result = user_sql.to_string();
-        for (name, info) in &sorted {
-            let read_fn = Self::read_fn_for(&info.file_path, &info.file_format)?;
-            // Replace table name references that appear as whole identifiers.
-            // We look for the name bounded by non-identifier characters.
-            let mut new_result = String::new();
-            let mut remaining = result.as_str();
-            while let Some(pos) = remaining.find(name.as_str()) {
-                // Check character before the match
-                let before_ok = if pos == 0 {
-                    true
-                } else {
-                    let ch = remaining.as_bytes()[pos - 1] as char;
-                    !ch.is_alphanumeric() && ch != '_'
-                };
-                // Check character after the match
-                let after_pos = pos + name.len();
-                let after_ok = if after_pos >= remaining.len() {
-                    true
-                } else {
-                    let ch = remaining.as_bytes()[after_pos] as char;
-                    !ch.is_alphanumeric() && ch != '_'
-                };
+        let mut next_relation = false;
+        let mut in_from_list = false;
+        for (index, token) in tokens.iter().enumerate() {
+            if let SqlTokenKind::Word { value, .. } = &token.kind {
+                if is_relation_keyword(value) {
+                    next_relation = true;
+                    in_from_list = false;
+                    continue;
+                }
 
-                if before_ok && after_ok {
-                    new_result.push_str(&remaining[..pos]);
-                    new_result.push_str(&read_fn);
-                    remaining = &remaining[after_pos..];
-                } else {
-                    new_result.push_str(&remaining[..after_pos]);
-                    remaining = &remaining[after_pos..];
+                if is_clause_boundary_keyword(value) {
+                    next_relation = false;
+                    in_from_list = false;
+                    continue;
                 }
             }
-            new_result.push_str(remaining);
-            result = new_result;
+
+            if matches!(token.kind, SqlTokenKind::Symbol(',') if in_from_list) {
+                next_relation = true;
+                continue;
+            }
+
+            if !next_relation {
+                continue;
+            }
+
+            match &token.kind {
+                SqlTokenKind::Word { value, quoted } => {
+                    if Self::token_is_part_of_qualified_name(&tokens, index) {
+                        next_relation = false;
+                        in_from_list = false;
+                        continue;
+                    }
+
+                    if let Some((source_name, info)) =
+                        source_lookup.get(&value.to_ascii_lowercase())
+                    {
+                        let read_fn = Self::read_fn_for(&info.file_path, &info.file_format)?;
+                        let replacement = if Self::has_explicit_alias(&tokens, index) {
+                            read_fn
+                        } else {
+                            let alias = if *quoted {
+                                user_sql[token.start..token.end].to_string()
+                            } else {
+                                source_name.to_string()
+                            };
+                            format!("{} AS {}", read_fn, alias)
+                        };
+                        replacements.push((token.start, token.end, replacement));
+                        in_from_list = true;
+                    } else {
+                        in_from_list = false;
+                    }
+                    next_relation = false;
+                }
+                SqlTokenKind::Symbol('(') => {
+                    next_relation = false;
+                    in_from_list = true;
+                }
+                _ => {
+                    next_relation = false;
+                    in_from_list = false;
+                }
+            }
         }
 
-        Ok(result)
+        Ok(Self::apply_replacements(user_sql, &replacements))
     }
+
+    fn apply_replacements(sql: &str, replacements: &[(usize, usize, String)]) -> String {
+        if replacements.is_empty() {
+            return sql.to_string();
+        }
+
+        let mut result = String::with_capacity(sql.len());
+        let mut cursor = 0;
+        for (start, end, replacement) in replacements {
+            result.push_str(&sql[cursor..*start]);
+            result.push_str(replacement);
+            cursor = *end;
+        }
+        result.push_str(&sql[cursor..]);
+        result
+    }
+
+    fn token_is_part_of_qualified_name(tokens: &[SqlToken], index: usize) -> bool {
+        matches!(
+            tokens.get(index.wrapping_sub(1)).map(|t| &t.kind),
+            Some(SqlTokenKind::Symbol('.'))
+        ) || matches!(
+            tokens.get(index + 1).map(|t| &t.kind),
+            Some(SqlTokenKind::Symbol('.'))
+        )
+    }
+
+    fn has_explicit_alias(tokens: &[SqlToken], index: usize) -> bool {
+        match tokens.get(index + 1).map(|token| &token.kind) {
+            Some(SqlTokenKind::Word { value, .. }) if value.eq_ignore_ascii_case("as") => true,
+            Some(SqlTokenKind::Word { value, .. }) => !is_clause_boundary_keyword(value),
+            _ => false,
+        }
+    }
+
+    fn tokenize_sql(sql: &str) -> Vec<SqlToken> {
+        let mut tokens = Vec::new();
+        let mut iter = sql.char_indices().peekable();
+
+        while let Some((start, ch)) = iter.next() {
+            if ch.is_whitespace() {
+                continue;
+            }
+
+            if ch == '-' && matches!(iter.peek(), Some((_, '-'))) {
+                iter.next();
+                for (_, next_ch) in iter.by_ref() {
+                    if next_ch == '\n' {
+                        break;
+                    }
+                }
+                continue;
+            }
+
+            if ch == '/' && matches!(iter.peek(), Some((_, '*'))) {
+                iter.next();
+                let mut previous = '\0';
+                for (_, next_ch) in iter.by_ref() {
+                    if previous == '*' && next_ch == '/' {
+                        break;
+                    }
+                    previous = next_ch;
+                }
+                continue;
+            }
+
+            if ch == '\'' {
+                while let Some((_, next_ch)) = iter.next() {
+                    if next_ch == '\'' {
+                        if matches!(iter.peek(), Some((_, '\''))) {
+                            iter.next();
+                        } else {
+                            break;
+                        }
+                    }
+                }
+                continue;
+            }
+
+            if ch == '"' {
+                let mut value = String::new();
+                let mut end = sql.len();
+                while let Some((idx, next_ch)) = iter.next() {
+                    if next_ch == '"' {
+                        if matches!(iter.peek(), Some((_, '"'))) {
+                            value.push('"');
+                            iter.next();
+                        } else {
+                            end = idx + next_ch.len_utf8();
+                            break;
+                        }
+                    } else {
+                        value.push(next_ch);
+                    }
+                }
+                tokens.push(SqlToken {
+                    kind: SqlTokenKind::Word {
+                        value,
+                        quoted: true,
+                    },
+                    start,
+                    end,
+                });
+                continue;
+            }
+
+            if is_identifier_start(ch) {
+                let mut value = String::new();
+                value.push(ch);
+                let mut end = start + ch.len_utf8();
+                while let Some((idx, next_ch)) = iter.peek().copied() {
+                    if is_identifier_part(next_ch) {
+                        value.push(next_ch);
+                        end = idx + next_ch.len_utf8();
+                        iter.next();
+                    } else {
+                        break;
+                    }
+                }
+                tokens.push(SqlToken {
+                    kind: SqlTokenKind::Word {
+                        value,
+                        quoted: false,
+                    },
+                    start,
+                    end,
+                });
+                continue;
+            }
+
+            if matches!(ch, '(' | ')' | ',' | '.') {
+                tokens.push(SqlToken {
+                    kind: SqlTokenKind::Symbol(ch),
+                    start,
+                    end: start + ch.len_utf8(),
+                });
+            }
+        }
+
+        tokens
+    }
+}
+
+fn is_identifier_start(ch: char) -> bool {
+    ch.is_ascii_alphabetic() || ch == '_'
+}
+
+fn is_identifier_part(ch: char) -> bool {
+    ch.is_ascii_alphanumeric() || ch == '_' || ch == '$'
+}
+
+fn is_relation_keyword(value: &str) -> bool {
+    value.eq_ignore_ascii_case("from") || value.eq_ignore_ascii_case("join")
+}
+
+fn is_clause_boundary_keyword(value: &str) -> bool {
+    matches!(
+        value.to_ascii_lowercase().as_str(),
+        "on" | "using"
+            | "where"
+            | "join"
+            | "inner"
+            | "left"
+            | "right"
+            | "full"
+            | "cross"
+            | "natural"
+            | "semi"
+            | "anti"
+            | "group"
+            | "order"
+            | "having"
+            | "limit"
+            | "offset"
+            | "qualify"
+            | "window"
+            | "union"
+            | "except"
+            | "intersect"
+            | "sample"
+            | "tablesample"
+            | "pivot"
+            | "unpivot"
+    )
 }
 
 #[cfg(test)]
@@ -365,5 +592,53 @@ mod tests {
         assert_eq!(columns.len(), 2);
         assert_eq!(columns[0].0, "id");
         assert_eq!(columns[1].0, "name");
+    }
+
+    #[test]
+    fn inline_sources_aliases_table_functions_in_relations_only() {
+        let engine = DuckDbEngine::new().unwrap();
+        engine
+            .register_source("github_policy_keywords", "/tmp/policy-keywords.csv", "csv")
+            .unwrap();
+        engine
+            .register_source("searchablebill", "/tmp/searchablebill.parquet", "parquet")
+            .unwrap();
+
+        let sql = "WITH policy_keywords AS (
+  SELECT keyword FROM github_policy_keywords
+)
+SELECT policy_keywords.keyword,
+  searchablebill.raw_text[:140] AS raw_text_sample
+FROM searchablebill
+JOIN policy_keywords ON LOWER(searchablebill.raw_text) LIKE policy_keywords.keyword";
+
+        let standalone = engine.inline_sources(sql).unwrap();
+
+        assert!(standalone
+            .contains("FROM read_csv('/tmp/policy-keywords.csv') AS github_policy_keywords"));
+        assert!(standalone
+            .contains("FROM read_parquet('/tmp/searchablebill.parquet') AS searchablebill"));
+        assert!(standalone.contains("JOIN policy_keywords ON"));
+        assert!(standalone.contains("searchablebill.raw_text[:140]"));
+        assert!(!standalone.contains("read_parquet('/tmp/searchablebill.parquet').raw_text"));
+    }
+
+    #[test]
+    fn inline_sources_preserves_explicit_aliases() {
+        let engine = DuckDbEngine::new().unwrap();
+        engine
+            .register_source("searchablebill", "/tmp/searchablebill.parquet", "parquet")
+            .unwrap();
+
+        let standalone = engine
+            .inline_sources(
+                "SELECT sb.raw_text FROM searchablebill AS sb WHERE sb.raw_text IS NOT NULL",
+            )
+            .unwrap();
+
+        assert_eq!(
+            standalone,
+            "SELECT sb.raw_text FROM read_parquet('/tmp/searchablebill.parquet') AS sb WHERE sb.raw_text IS NOT NULL"
+        );
     }
 }
