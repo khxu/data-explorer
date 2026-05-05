@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -42,6 +43,7 @@ export function ResizableResultsTable({ result }: Props) {
     column: string;
     value: string;
   } | null>(null);
+  const [copiedCell, setCopiedCell] = useState(false);
 
   const resizing = useRef<{ index: number; startX: number; startWidth: number } | null>(null);
 
@@ -129,6 +131,18 @@ export function ResizableResultsTable({ result }: Props) {
   function formatCellValue(cell: unknown): string {
     if (cell === null || cell === undefined) return "";
     return String(cell);
+  }
+
+  async function handleCopyCellValue() {
+    if (!inspectedCell) return;
+
+    try {
+      await navigator.clipboard.writeText(inspectedCell.value);
+      setCopiedCell(true);
+      window.setTimeout(() => setCopiedCell(false), 2000);
+    } catch (e) {
+      console.error("Failed to copy cell value:", e);
+    }
   }
 
   return (
@@ -222,13 +236,28 @@ export function ResizableResultsTable({ result }: Props) {
       {/* Cell detail dialog */}
       <Dialog
         open={!!inspectedCell}
-        onOpenChange={(v) => !v && setInspectedCell(null)}
+        onOpenChange={(v) => {
+          if (!v) {
+            setInspectedCell(null);
+            setCopiedCell(false);
+          }
+        }}
       >
         <DialogContent className="sm:max-w-lg max-h-[80vh] flex flex-col">
-          <DialogHeader>
+          <DialogHeader className="flex-row items-center justify-between gap-3 pr-8">
             <DialogTitle className="text-sm font-mono truncate">
               {inspectedCell?.column}
             </DialogTitle>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleCopyCellValue}
+              disabled={!inspectedCell}
+              title="Copy cell value to clipboard"
+            >
+              {copiedCell ? "✓ Copied" : "Copy"}
+            </Button>
           </DialogHeader>
           <div className="flex-1 min-h-0 overflow-auto">
             <pre className="text-sm whitespace-pre-wrap break-words font-mono bg-muted/50 p-3 rounded">
