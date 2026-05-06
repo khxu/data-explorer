@@ -11,6 +11,7 @@ Built with [Tauri v2](https://tauri.app/) + React + TypeScript on the frontend a
 - [Node.js](https://nodejs.org/) (v24+)
 - [Rust](https://www.rust-lang.org/tools/install) (stable)
 - Tauri v2 system dependencies — see the [Tauri prerequisites guide](https://v2.tauri.app/start/prerequisites/)
+- Optional for AI Assist: a working GitHub Copilot CLI setup with access to Copilot models
 
 ### Install & Run
 
@@ -76,7 +77,23 @@ You can open multiple query tabs to run different queries side-by-side and compa
 - Drag column borders in the results table to resize column widths
 - Click any cell to open a focused view with text wrapping for long values
 
-### 3. Organize with Tags
+### 3. Draft SQL with AI Assist
+
+AI Assist can help draft SQL from a natural-language prompt while using your selected data sources as context.
+
+1. Open the **Query** tab and click **AI Assist**
+2. Choose a **Model**, or keep **Copilot default**
+3. Select which tables to include as context — this controls what schema and sample data are sent to the model
+4. Describe the query you want, then click **Draft SQL** or press **⌘+Enter** in the prompt box
+5. Review the generated SQL and click **Insert SQL** to place it in the active query tab
+
+For each selected table, Data Explorer sends the table name, column names, column types, and the first 2 sample rows. Keeping only relevant tables selected helps reduce token usage and keeps prompts focused. Your last selected model and table context are remembered the next time you open AI Assist.
+
+While a draft is running, the sidebar shows progress messages and, when available, a live draft/reasoning stream. After a suggestion returns, it shows the model used and token usage split into available categories such as input, output, cache read, cache write, total, and duration.
+
+AI Assist drafts are also saved in history with the original prompt, generated SQL, model information, token usage, and timestamp. Open the **History** tab, switch to **AI Assist**, and click **Reuse SQL** to load a prior draft into the active query tab.
+
+### 4. Organize with Tags
 
 Tags let you categorize data sources across projects.
 
@@ -85,7 +102,7 @@ Tags let you categorize data sources across projects.
 3. Assign tags when registering a data source, or edit them later via the **🏷** button on any source
 4. Tags appear as colored badges in the sidebar
 
-### 4. Create Projects
+### 5. Create Projects
 
 Projects are saved views that filter data sources by tags. A data source can appear in multiple projects.
 
@@ -96,7 +113,7 @@ Projects are saved views that filter data sources by tags. A data source can app
 
 For example, a project called "Q4 Analysis" might filter on tags "q4" and "revenue", showing only the data sources relevant to that work.
 
-### 5. Export Results
+### 6. Export Results
 
 After running a query, you can save the results to a new file.
 
@@ -108,14 +125,16 @@ After running a query, you can save the results to a new file.
 
 **Safety guardrail:** Data Explorer will never overwrite an existing file or write to a path that matches a registered data source. Exports always create new files.
 
-### 6. Browse & Manage Query History
+### 7. Browse & Manage History
 
-Every query you run is logged with its SQL, status, timing, and a small result sample.
+Every query you run is logged with its SQL, status, timing, and a small result sample. AI Assist drafts are logged separately with the prompt, generated SQL, model details, and token usage.
 
 1. Click the **History** tab
-2. Browse past queries — successful ones show row count and execution time, failed ones show the error message
-3. Click **Reuse** on any entry to load its SQL back into the active query tab and switch to the Query tab
-4. **Clear history**: click **Clear All** to delete everything, or **Clear before…** to remove entries older than a specific date
+2. Switch between **Queries** and **AI Assist**
+3. Browse past queries — successful ones show row count and execution time, failed ones show the error message
+4. Browse past AI Assist drafts — entries show the prompt, generated SQL, model, token usage, and timestamp
+5. Click **Reuse** or **Reuse SQL** on any entry to load its SQL back into the active query tab and switch to the Query tab
+6. Clear query history or AI Assist history independently from the active history view
 
 ---
 
@@ -144,8 +163,9 @@ Every query you run is logged with its SQL, status, timing, and a small result s
 ```
 
 - **DuckDB** runs in-memory in the Rust backend. Registered files are wrapped as CTEs (`WITH tablename AS (SELECT * FROM read_parquet(...))`) before each query, so changes to the underlying files are picked up automatically.
-- **SQLite** stores all persistent metadata: registered data sources, tags, projects, query tabs, and query history (with truncated result samples to keep the database small).
+- **SQLite** stores all persistent metadata: registered data sources, tags, projects, query tabs, query history (with truncated result samples to keep the database small), and AI Assist history.
 - **Tauri** bridges the frontend and backend via typed `invoke()` commands with native OS file dialogs for picking files and save locations.
+- **GitHub Copilot SDK** powers AI Assist by sending selected schema/sample context and prompt text to the chosen Copilot model.
 
 ## Supported File Formats
 
@@ -166,7 +186,7 @@ Every query you run is logged with its SQL, status, timing, and a small result s
 
 ```
 src/                          # React frontend
-├── components/               # UI components (Sidebar, QueryEditor, QueryTabBar, HistoryPanel, dialogs)
+├── components/               # UI components (Sidebar, QueryEditor, QueryTabBar, AiSqlAssistant, HistoryPanel, dialogs)
 ├── components/ui/            # shadcn/ui primitives
 ├── hooks/useAppState.tsx     # Global app state context
 └── lib/api.ts                # Typed wrappers for Tauri invoke() calls
@@ -181,7 +201,8 @@ src-tauri/src/                # Rust backend
     ├── tags.rs               # Tag CRUD and assignment
     ├── projects.rs           # Project CRUD (tag-based filters)
     ├── queries.rs            # Execute SQL, query history, query tab persistence
-    └── export.rs             # Export results with overwrite protection
+    ├── export.rs             # Export results with overwrite protection
+    └── ai.rs                 # AI SQL drafting, progress events, and AI Assist history
 ```
 
 ### Key Commands

@@ -5,12 +5,14 @@ import {
   type Project,
   type QueryResult,
   type QueryHistoryEntry,
+  type AiAssistHistoryEntry,
   type DataSourceSchema,
   listDataSources,
   getDataSourceSchema,
   listTags,
   listProjects,
   getQueryHistory,
+  getAiAssistHistory,
   loadQueryTabs,
   releaseQueryResult,
   saveQueryTabs,
@@ -56,6 +58,7 @@ interface AppState {
   tags: Tag[];
   projects: Project[];
   queryHistory: QueryHistoryEntry[];
+  aiAssistHistory: AiAssistHistoryEntry[];
   activeProject: Project | null;
   activeTab: string;
   queryTabs: QueryTab[];
@@ -92,6 +95,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [tags, setTags] = useState<Tag[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [queryHistory, setQueryHistory] = useState<QueryHistoryEntry[]>([]);
+  const [aiAssistHistory, setAiAssistHistory] = useState<AiAssistHistoryEntry[]>([]);
   const [activeProject, setActiveProject] = useState<Project | null>(null);
   const [activeTab, setActiveTab] = useState("query");
 
@@ -297,7 +301,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const refreshHistory = useCallback(async () => {
     try {
-      setQueryHistory(await getQueryHistory());
+      const [queries, aiAssists] = await Promise.all([
+        getQueryHistory(),
+        getAiAssistHistory(),
+      ]);
+      setQueryHistory(queries);
+      setAiAssistHistory(aiAssists);
     } catch (e) {
       setError(String(e));
     }
@@ -318,6 +327,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         tags,
         projects,
         queryHistory,
+        aiAssistHistory,
         activeProject,
         activeTab,
         queryTabs,

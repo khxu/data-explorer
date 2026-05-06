@@ -180,6 +180,91 @@ export async function clearQueryHistory(before?: string): Promise<number> {
   return invoke("clear_query_history", { before: before ?? null });
 }
 
+// -- AI SQL Assistant --
+
+export interface AiModel {
+  id: string;
+  name: string;
+  supported_reasoning_efforts: string[] | null;
+  default_reasoning_effort: string | null;
+}
+
+export interface AiColumnContext {
+  name: string;
+  data_type: string;
+}
+
+export interface AiDataSourceContext {
+  data_source_id: string;
+  name: string;
+  file_format: string;
+  columns: AiColumnContext[];
+  sample_rows: unknown[][];
+}
+
+export interface AiDraftResponse {
+  sql: string;
+  context: AiDataSourceContext[];
+  model_used: string | null;
+  token_usage: AiTokenUsage | null;
+}
+
+export interface AiTokenUsage {
+  input_tokens: number | null;
+  output_tokens: number | null;
+  cache_read_tokens: number | null;
+  cache_write_tokens: number | null;
+  total_tokens: number | null;
+  duration_ms: number | null;
+}
+
+export interface AiAssistHistoryEntry {
+  id: string;
+  prompt_text: string;
+  generated_sql: string;
+  requested_model: string | null;
+  model_used: string | null;
+  model_name: string | null;
+  token_usage: string | null;
+  created_at: string;
+}
+
+export async function listAiModels(): Promise<AiModel[]> {
+  return invoke("list_ai_models");
+}
+
+export async function draftSqlQuery(
+  requestId: string,
+  request: string,
+  model: string | null,
+  modelName: string | null,
+  currentSql: string,
+  dataSourceIds: string[]
+): Promise<AiDraftResponse> {
+  return invoke("draft_sql_query", {
+    requestId,
+    request,
+    model,
+    modelName,
+    currentSql,
+    dataSourceIds,
+  });
+}
+
+export async function getAiAssistHistory(
+  limit?: number,
+  offset?: number
+): Promise<AiAssistHistoryEntry[]> {
+  return invoke("get_ai_assist_history", {
+    limit: limit ?? 50,
+    offset: offset ?? 0,
+  });
+}
+
+export async function clearAiAssistHistory(before?: string): Promise<number> {
+  return invoke("clear_ai_assist_history", { before: before ?? null });
+}
+
 // -- Query Tabs --
 
 export interface SavedQueryTab {

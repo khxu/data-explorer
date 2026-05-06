@@ -284,6 +284,11 @@ export function QueryTabBar() {
                 if (suppressClickRef.current) return;
                 setActiveQueryTab(tab.id);
               }}
+              onDoubleClick={(e) => {
+                e.stopPropagation();
+                clearPointerDragState();
+                startRename(tab.id, tab.name);
+              }}
               onPointerDown={(e) => {
                 if (!isEditing) handlePointerDown(e, tab.id);
               }}
@@ -307,10 +312,6 @@ export function QueryTabBar() {
               ) : draggingTabId ? (
                 <span
                   className="truncate max-w-[120px] select-none"
-                  onDoubleClick={(e) => {
-                    e.stopPropagation();
-                    startRename(tab.id, tab.name);
-                  }}
                 >
                   {tab.name}
                 </span>
@@ -320,10 +321,6 @@ export function QueryTabBar() {
                     <TooltipTrigger asChild>
                       <span
                         className="truncate max-w-[120px] select-none"
-                        onDoubleClick={(e) => {
-                          e.stopPropagation();
-                          startRename(tab.id, tab.name);
-                        }}
                       >
                         {tab.name}
                       </span>

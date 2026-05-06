@@ -9,6 +9,7 @@ use tauri::Manager;
 use db::Database;
 use duckdb_engine::DuckDbEngine;
 
+use commands::ai::*;
 use commands::data_sources::*;
 use commands::export::*;
 use commands::projects::*;
@@ -76,6 +77,10 @@ pub fn run() {
             load_query_tabs,
             save_query_tabs,
             export_results,
+            list_ai_models,
+            draft_sql_query,
+            get_ai_assist_history,
+            clear_ai_assist_history,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
