@@ -20,6 +20,12 @@ pub struct DuckDbEngine {
 }
 
 #[derive(Debug, Clone)]
+pub struct SourcePreview {
+    pub columns: Vec<(String, String)>,
+    pub rows: Vec<Vec<serde_json::Value>>,
+}
+
+#[derive(Debug, Clone)]
 enum SqlTokenKind {
     Word { value: String, quoted: bool },
     Symbol(char),
@@ -118,13 +124,41 @@ impl DuckDbEngine {
         file_path: &str,
         file_format: &str,
     ) -> Result<Vec<(String, String)>, AppError> {
+        Ok(self.preview_source(file_path, file_format, 0)?.columns)
+    }
+
+    pub fn preview_source(
+        &self,
+        file_path: &str,
+        file_format: &str,
+        limit: usize,
+    ) -> Result<SourcePreview, AppError> {
         let read_fn = Self::read_fn_for(file_path, file_format)?;
-        let sql = format!("SELECT * FROM {} LIMIT 0", read_fn);
+        let sql = format!("SELECT * FROM {} LIMIT {}", read_fn, limit);
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(&sql)?;
-        let rows = stmt.query([])?;
-        drop(rows);
-        let columns = (0..stmt.column_count())
+        let mut result_rows = stmt.query([])?;
+        let mut rows = Vec::new();
+        let mut column_count = 0;
+
+        while let Some(row) = result_rows.next()? {
+            if column_count == 0 {
+                column_count = row.as_ref().column_count();
+            }
+            let mut row_data = Vec::with_capacity(column_count);
+            for i in 0..column_count {
+                let val: duckdb::types::Value = row.get(i)?;
+                row_data.push(Self::duckdb_value_to_json(val));
+            }
+            rows.push(row_data);
+        }
+
+        drop(result_rows);
+
+        if column_count == 0 {
+            column_count = stmt.column_count();
+        }
+        let columns = (0..column_count)
             .map(|i| {
                 (
                     stmt.column_name(i)
@@ -133,7 +167,23 @@ impl DuckDbEngine {
                 )
             })
             .collect();
-        Ok(columns)
+
+        Ok(SourcePreview { columns, rows })
+    }
+
+    fn duckdb_value_to_json(val: duckdb::types::Value) -> serde_json::Value {
+        match val {
+            duckdb::types::Value::Null => serde_json::Value::Null,
+            duckdb::types::Value::Boolean(b) => serde_json::Value::Bool(b),
+            duckdb::types::Value::TinyInt(i) => serde_json::json!(i),
+            duckdb::types::Value::SmallInt(i) => serde_json::json!(i),
+            duckdb::types::Value::Int(i) => serde_json::json!(i),
+            duckdb::types::Value::BigInt(i) => serde_json::json!(i),
+            duckdb::types::Value::Float(f) => serde_json::json!(f),
+            duckdb::types::Value::Double(f) => serde_json::json!(f),
+            duckdb::types::Value::Text(s) => serde_json::Value::String(s),
+            _ => serde_json::Value::String(format!("{:?}", val)),
+        }
     }
 
     /// Build a CTE prefix that makes all registered sources available as

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppState } from "@/hooks/useAppState";
 import { cancelQuery, executeQuery, getStandaloneSql, releaseQueryResult } from "@/lib/api";
+import { AiSqlAssistant } from "./AiSqlAssistant";
 import { ExportDialog } from "./ExportDialog";
 import { ResizableResultsTable } from "./ResizableResultsTable";
 import { SqlEditor } from "./SqlEditor";
@@ -13,6 +14,7 @@ import {
 
 export function QueryEditor() {
   const {
+    dataSources,
     dataSourceSchemas,
     queryTabs,
     activeQueryTabId,
@@ -25,6 +27,7 @@ export function QueryEditor() {
   const [canceling, setCanceling] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [showExport, setShowExport] = useState(false);
+  const [showAssistant, setShowAssistant] = useState(false);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -119,101 +122,118 @@ export function QueryEditor() {
   }
 
   return (
-    <div className="flex flex-col h-full">
-      {/* SQL Editor */}
-      <div className="p-3 border-b space-y-2">
-        <SqlEditor
-          key={tabId}
-          value={sql}
-          dataSourceSchemas={dataSourceSchemas}
-          onChange={(v) => updateQueryTab(tabId, { sql: v })}
-          onRun={handleRun}
-        />
-        <div className="flex items-center justify-between">
-          <div className="flex gap-2">
-            <Button onClick={handleRun} disabled={running || !sql.trim()} size="sm">
-              {running ? `Running ${elapsedLabel}` : "▶ Run"}
-            </Button>
-            {running && (
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={handleCancel}
-                disabled={canceling}
-              >
-                {canceling ? "Canceling..." : "Cancel"}
+    <div className="flex h-full min-w-0">
+      <div className="flex flex-col h-full min-w-0 flex-1">
+        {/* SQL Editor */}
+        <div className="p-3 border-b space-y-2">
+          <SqlEditor
+            key={tabId}
+            value={sql}
+            dataSourceSchemas={dataSourceSchemas}
+            onChange={(v) => updateQueryTab(tabId, { sql: v })}
+            onRun={handleRun}
+          />
+          <div className="flex items-center justify-between">
+            <div className="flex gap-2">
+              <Button onClick={handleRun} disabled={running || !sql.trim()} size="sm">
+                {running ? `Running ${elapsedLabel}` : "▶ Run"}
               </Button>
-            )}
-            {result && (
+              {running && (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={handleCancel}
+                  disabled={canceling}
+                >
+                  {canceling ? "Canceling..." : "Cancel"}
+                </Button>
+              )}
+              {result && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowExport(true)}
+                >
+                  Export
+                </Button>
+              )}
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setShowExport(true)}
+                onClick={handleCopySql}
+                disabled={!sql.trim()}
+                title="Copy standalone SQL (with file references expanded) to clipboard"
               >
-                Export
+                {copied ? "✓ Copied" : "Copy SQL"}
               </Button>
-            )}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleCopySql}
-              disabled={!sql.trim()}
-              title="Copy standalone SQL (with file references expanded) to clipboard"
-            >
-              {copied ? "✓ Copied" : "Copy SQL"}
-            </Button>
-          </div>
-          <span className="text-xs text-muted-foreground">⌘+Enter to run</span>
-        </div>
-        {running && (
-          <div className="space-y-1" role="status" aria-live="polite">
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>DuckDB query in progress</span>
-              <span>{elapsedLabel}</span>
+              <Button
+                variant={showAssistant ? "default" : "outline"}
+                size="sm"
+                onClick={() => setShowAssistant((value) => !value)}
+              >
+                AI Assist
+              </Button>
             </div>
-            <div
-              className="h-1.5 overflow-hidden rounded-full bg-muted"
-              aria-label="Query progress"
-            >
-              <div className="query-progress-indicator h-full w-1/3 rounded-full bg-primary" />
+            <span className="text-xs text-muted-foreground">⌘+Enter to run</span>
+          </div>
+          {running && (
+            <div className="space-y-1" role="status" aria-live="polite">
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>DuckDB query in progress</span>
+                <span>{elapsedLabel}</span>
+              </div>
+              <div
+                className="h-1.5 overflow-hidden rounded-full bg-muted"
+                aria-label="Query progress"
+              >
+                <div className="query-progress-indicator h-full w-1/3 rounded-full bg-primary" />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Error */}
+        {queryError && (
+          <div className="p-3 bg-destructive/10 text-destructive text-sm">
+            {queryError}
+          </div>
+        )}
+
+        {/* Results */}
+        {result && (
+          <div className="flex-1 min-h-0 flex flex-col">
+            <div className="px-3 py-2 text-xs text-muted-foreground border-b">
+              {result.row_count} row{result.row_count !== 1 ? "s" : ""} •{" "}
+              {result.execution_time_ms}ms
+            </div>
+            <div className="flex-1 min-h-0">
+              <ResizableResultsTable result={result} />
             </div>
           </div>
         )}
+
+        {!result && !queryError && !running && (
+          <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
+            Write a query and press Run to see results
+          </div>
+        )}
+
+        {/* Export Dialog */}
+        <ExportDialog
+          open={showExport}
+          onClose={() => setShowExport(false)}
+          sql={sql}
+          resultTableName={result?.export_table_name}
+        />
       </div>
-
-      {/* Error */}
-      {queryError && (
-        <div className="p-3 bg-destructive/10 text-destructive text-sm">
-          {queryError}
-        </div>
+      {showAssistant && (
+        <AiSqlAssistant
+          currentSql={sql}
+          dataSources={dataSources}
+          onApplySql={(draftSql) => updateQueryTab(tabId, { sql: draftSql })}
+          onClose={() => setShowAssistant(false)}
+        />
       )}
-
-      {/* Results */}
-      {result && (
-        <div className="flex-1 min-h-0 flex flex-col">
-          <div className="px-3 py-2 text-xs text-muted-foreground border-b">
-            {result.row_count} row{result.row_count !== 1 ? "s" : ""} •{" "}
-            {result.execution_time_ms}ms
-          </div>
-          <div className="flex-1 min-h-0">
-            <ResizableResultsTable result={result} />
-          </div>
-        </div>
-      )}
-
-      {!result && !queryError && !running && (
-        <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
-          Write a query and press Run to see results
-        </div>
-      )}
-
-      {/* Export Dialog */}
-      <ExportDialog
-        open={showExport}
-        onClose={() => setShowExport(false)}
-        sql={sql}
-        resultTableName={result?.export_table_name}
-      />
     </div>
   );
 }

@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAppState } from "@/hooks/useAppState";
-import { clearQueryHistory } from "@/lib/api";
+import { clearAiAssistHistory, clearQueryHistory, type AiTokenUsage } from "@/lib/api";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -15,18 +16,26 @@ import {
 } from "@/components/ui/alert-dialog";
 
 export function HistoryPanel() {
-  const { queryHistory, setLastSql, setActiveTab, refreshHistory } = useAppState();
+  const {
+    queryHistory,
+    aiAssistHistory,
+    setLastSql,
+    setActiveTab,
+    refreshHistory,
+  } = useAppState();
   const [showClearDialog, setShowClearDialog] = useState(false);
   const [clearMode, setClearMode] = useState<"all" | "before">("all");
+  const [clearTarget, setClearTarget] = useState<"query" | "ai">("query");
   const [beforeDate, setBeforeDate] = useState("");
 
   async function handleClear() {
     try {
+      const clearFn = clearTarget === "query" ? clearQueryHistory : clearAiAssistHistory;
       if (clearMode === "all") {
-        await clearQueryHistory();
+        await clearFn();
       } else if (beforeDate) {
         // Convert local date input to ISO string for SQLite comparison
-        await clearQueryHistory(new Date(beforeDate).toISOString());
+        await clearFn(new Date(beforeDate).toISOString());
       }
       setShowClearDialog(false);
       setBeforeDate("");
@@ -39,92 +48,170 @@ export function HistoryPanel() {
   return (
     <div className="flex flex-col h-full">
       <div className="p-3 border-b flex items-center justify-between">
-        <h3 className="text-sm font-semibold">Query History</h3>
+        <h3 className="text-sm font-semibold">History</h3>
         <div className="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-xs"
-            onClick={() => {
-              setClearMode("before");
-              setShowClearDialog(true);
-            }}
-          >
-            Clear before…
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-xs text-destructive hover:text-destructive"
-            onClick={() => {
-              setClearMode("all");
-              setShowClearDialog(true);
-            }}
-          >
-            Clear All
-          </Button>
           <Button variant="ghost" size="sm" onClick={refreshHistory}>
             Refresh
           </Button>
         </div>
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto">
-        <div className="p-3 space-y-2">
-          {queryHistory.map((entry) => (
-            <div
-              key={entry.id}
-              className="border rounded-lg p-3 space-y-1 hover:bg-accent/30 transition-colors"
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Badge
-                    variant={entry.status === "success" ? "default" : "destructive"}
-                    className="text-xs"
-                  >
-                    {entry.status}
-                  </Badge>
-                  {entry.row_count != null && (
-                    <span className="text-xs text-muted-foreground">
-                      {entry.row_count} rows
-                    </span>
-                  )}
-                  {entry.execution_time_ms != null && (
-                    <span className="text-xs text-muted-foreground">
-                      {entry.execution_time_ms}ms
-                    </span>
+        <Tabs defaultValue="queries" className="h-full flex flex-col">
+          <div className="px-3 pt-3 flex items-center justify-between gap-2">
+            <TabsList>
+              <TabsTrigger value="queries">Queries</TabsTrigger>
+              <TabsTrigger value="ai">AI Assist</TabsTrigger>
+            </TabsList>
+          </div>
+
+          <TabsContent value="queries" className="mt-0 flex-1 min-h-0">
+            <div className="p-3 space-y-2">
+              <HistoryActions
+                onClearBefore={() => {
+                  setClearTarget("query");
+                  setClearMode("before");
+                  setShowClearDialog(true);
+                }}
+                onClearAll={() => {
+                  setClearTarget("query");
+                  setClearMode("all");
+                  setShowClearDialog(true);
+                }}
+              />
+              {queryHistory.map((entry) => (
+                <div
+                  key={entry.id}
+                  className="border rounded-lg p-3 space-y-1 hover:bg-accent/30 transition-colors"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Badge
+                        variant={entry.status === "success" ? "default" : "destructive"}
+                        className="text-xs"
+                      >
+                        {entry.status}
+                      </Badge>
+                      {entry.row_count != null && (
+                        <span className="text-xs text-muted-foreground">
+                          {entry.row_count} rows
+                        </span>
+                      )}
+                      {entry.execution_time_ms != null && (
+                        <span className="text-xs text-muted-foreground">
+                          {entry.execution_time_ms}ms
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(entry.created_at).toLocaleString()}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 text-xs"
+                        onClick={() => {
+                          setLastSql(entry.sql_text);
+                          setActiveTab("query");
+                        }}
+                      >
+                        Reuse
+                      </Button>
+                    </div>
+                  </div>
+                  <pre className="text-xs font-mono bg-muted/50 p-2 rounded overflow-x-auto whitespace-pre-wrap">
+                    {entry.sql_text}
+                  </pre>
+                  {entry.error_message && (
+                    <p className="text-xs text-destructive">{entry.error_message}</p>
                   )}
                 </div>
-                <div className="flex items-center gap-1">
-                  <span className="text-xs text-muted-foreground">
-                    {new Date(entry.created_at).toLocaleString()}
-                  </span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 text-xs"
-                    onClick={() => {
-                      setLastSql(entry.sql_text);
-                      setActiveTab("query");
-                    }}
-                  >
-                    Reuse
-                  </Button>
-                </div>
-              </div>
-              <pre className="text-xs font-mono bg-muted/50 p-2 rounded overflow-x-auto whitespace-pre-wrap">
-                {entry.sql_text}
-              </pre>
-              {entry.error_message && (
-                <p className="text-xs text-destructive">{entry.error_message}</p>
+              ))}
+              {queryHistory.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-8">
+                  No queries yet
+                </p>
               )}
             </div>
-          ))}
-          {queryHistory.length === 0 && (
-            <p className="text-sm text-muted-foreground text-center py-8">
-              No queries yet
-            </p>
-          )}
-        </div>
+          </TabsContent>
+
+          <TabsContent value="ai" className="mt-0 flex-1 min-h-0">
+            <div className="p-3 space-y-2">
+              <HistoryActions
+                onClearBefore={() => {
+                  setClearTarget("ai");
+                  setClearMode("before");
+                  setShowClearDialog(true);
+                }}
+                onClearAll={() => {
+                  setClearTarget("ai");
+                  setClearMode("all");
+                  setShowClearDialog(true);
+                }}
+              />
+              {aiAssistHistory.map((entry) => {
+                const usage = parseTokenUsage(entry.token_usage);
+                return (
+                  <div
+                    key={entry.id}
+                    className="border rounded-lg p-3 space-y-2 hover:bg-accent/30 transition-colors"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <Badge variant="outline" className="text-xs">
+                          AI Assist
+                        </Badge>
+                        <span className="ml-2 text-xs text-muted-foreground">
+                          {formatAiModel(entry.model_name, entry.model_used, entry.requested_model)}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span className="text-xs text-muted-foreground">
+                          {new Date(entry.created_at).toLocaleString()}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 text-xs"
+                          onClick={() => {
+                            setLastSql(entry.generated_sql);
+                            setActiveTab("query");
+                          }}
+                        >
+                          Reuse SQL
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium text-muted-foreground">Prompt</p>
+                      <p className="text-sm whitespace-pre-wrap">{entry.prompt_text}</p>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium text-muted-foreground">Generated SQL</p>
+                      <pre className="text-xs font-mono bg-muted/50 p-2 rounded overflow-x-auto whitespace-pre-wrap">
+                        {entry.generated_sql}
+                      </pre>
+                    </div>
+                    {usage && (
+                      <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                        {formatTokenUsageRows(usage).map(([label, value]) => (
+                          <span key={label}>
+                            {label}: <span className="font-mono text-foreground">{value}</span>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {aiAssistHistory.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-8">
+                  No AI assist history yet
+                </p>
+              )}
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
 
       <AlertDialog open={showClearDialog} onOpenChange={setShowClearDialog}>
@@ -135,8 +222,8 @@ export function HistoryPanel() {
             </AlertDialogTitle>
             <AlertDialogDescription>
               {clearMode === "all"
-                ? "This will permanently delete all query history entries. This cannot be undone."
-                : "Delete all query history entries before the selected date."}
+                ? `This will permanently delete all ${clearTarget === "query" ? "query" : "AI assist"} history entries. This cannot be undone.`
+                : `Delete all ${clearTarget === "query" ? "query" : "AI assist"} history entries before the selected date.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           {clearMode === "before" && (
@@ -163,4 +250,61 @@ export function HistoryPanel() {
       </AlertDialog>
     </div>
   );
+}
+
+function HistoryActions({
+  onClearBefore,
+  onClearAll,
+}: {
+  onClearBefore: () => void;
+  onClearAll: () => void;
+}) {
+  return (
+    <div className="flex justify-end gap-1">
+      <Button variant="ghost" size="sm" className="text-xs" onClick={onClearBefore}>
+        Clear before…
+      </Button>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="text-xs text-destructive hover:text-destructive"
+        onClick={onClearAll}
+      >
+        Clear All
+      </Button>
+    </div>
+  );
+}
+
+function parseTokenUsage(value: string | null): AiTokenUsage | null {
+  if (!value) return null;
+  try {
+    return JSON.parse(value) as AiTokenUsage;
+  } catch {
+    return null;
+  }
+}
+
+function formatAiModel(
+  modelName: string | null,
+  modelUsed: string | null,
+  requestedModel: string | null
+) {
+  if (modelName && modelUsed && modelName !== modelUsed) return `${modelName} (${modelUsed})`;
+  return modelName ?? modelUsed ?? requestedModel ?? "Copilot default model";
+}
+
+function formatTokenUsageRows(usage: AiTokenUsage): [string, string][] {
+  return [
+    ["Input", formatTokenCount(usage.input_tokens)],
+    ["Output", formatTokenCount(usage.output_tokens)],
+    ["Cache read", formatTokenCount(usage.cache_read_tokens)],
+    ["Cache write", formatTokenCount(usage.cache_write_tokens)],
+    ["Total", formatTokenCount(usage.total_tokens)],
+  ];
+}
+
+function formatTokenCount(value: number | null) {
+  if (value === null || value === undefined) return "n/a";
+  return Math.round(value).toLocaleString();
 }

@@ -67,6 +67,17 @@ impl Database {
                 created_at TEXT NOT NULL DEFAULT (datetime('now'))
             );
 
+            CREATE TABLE IF NOT EXISTS ai_assist_history (
+                id TEXT PRIMARY KEY,
+                prompt_text TEXT NOT NULL,
+                generated_sql TEXT NOT NULL,
+                requested_model TEXT,
+                model_used TEXT,
+                model_name TEXT,
+                token_usage TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+
             CREATE TABLE IF NOT EXISTS query_tabs (
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
