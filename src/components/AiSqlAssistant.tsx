@@ -27,6 +27,8 @@ interface AiSqlAssistantProps {
 const DEFAULT_MODEL_VALUE = "__copilot_default__";
 const MAX_ACTIVITY_ITEMS = 8;
 const MAX_REASONING_CHARS = 800;
+const AI_ASSIST_MODEL_STORAGE_KEY = "data-explorer.ai-assist.selected-model";
+const AI_ASSIST_TABLES_STORAGE_KEY = "data-explorer.ai-assist.selected-tables";
 
 interface AiDraftProgress {
   request_id: string;
@@ -39,6 +41,36 @@ interface AiDraftProgress {
   cache_write_tokens: number | null;
 }
 
+function loadPersistedModel() {
+  if (typeof window === "undefined") return DEFAULT_MODEL_VALUE;
+
+  try {
+    return window.localStorage.getItem(AI_ASSIST_MODEL_STORAGE_KEY) ?? DEFAULT_MODEL_VALUE;
+  } catch (error) {
+    console.warn("Unable to load persisted AI Assist model", error);
+    return DEFAULT_MODEL_VALUE;
+  }
+}
+
+function loadPersistedDataSourceIds(dataSources: DataSource[]) {
+  const allIds = dataSources.map((source) => source.id);
+  if (typeof window === "undefined") return allIds;
+
+  try {
+    const storedValue = window.localStorage.getItem(AI_ASSIST_TABLES_STORAGE_KEY);
+    if (storedValue === null) return allIds;
+
+    const parsed = JSON.parse(storedValue);
+    if (!Array.isArray(parsed)) return allIds;
+
+    const availableIds = new Set(allIds);
+    return parsed.filter((id): id is string => typeof id === "string" && availableIds.has(id));
+  } catch (error) {
+    console.warn("Unable to load persisted AI Assist tables", error);
+    return allIds;
+  }
+}
+
 export function AiSqlAssistant({
   currentSql,
   dataSources,
@@ -46,7 +78,7 @@ export function AiSqlAssistant({
   onClose,
 }: AiSqlAssistantProps) {
   const [models, setModels] = useState<AiModel[]>([]);
-  const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL_VALUE);
+  const [selectedModel, setSelectedModel] = useState(loadPersistedModel);
   const [request, setRequest] = useState("");
   const [draft, setDraft] = useState("");
   const [draftModel, setDraftModel] = useState<string | null>(null);
@@ -56,7 +88,7 @@ export function AiSqlAssistant({
   const [tokenUsage, setTokenUsage] = useState<string | null>(null);
   const [draftTokenUsage, setDraftTokenUsage] = useState<AiTokenUsage | null>(null);
   const [selectedDataSourceIds, setSelectedDataSourceIds] = useState<string[]>(() =>
-    dataSources.map((source) => source.id)
+    loadPersistedDataSourceIds(dataSources)
   );
   const [loadingModels, setLoadingModels] = useState(false);
   const [drafting, setDrafting] = useState(false);
@@ -71,13 +103,41 @@ export function AiSqlAssistant({
   useEffect(() => {
     setSelectedDataSourceIds((previousIds) => {
       const availableIds = new Set(dataSources.map((source) => source.id));
-      const keptIds = previousIds.filter((id) => availableIds.has(id));
-      const newIds = dataSources
-        .map((source) => source.id)
-        .filter((id) => !previousIds.includes(id));
-      return [...keptIds, ...newIds];
+      return previousIds.filter((id) => availableIds.has(id));
     });
   }, [dataSources]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(AI_ASSIST_MODEL_STORAGE_KEY, selectedModel);
+    } catch (error) {
+      console.warn("Unable to save persisted AI Assist model", error);
+    }
+  }, [selectedModel]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        AI_ASSIST_TABLES_STORAGE_KEY,
+        JSON.stringify(selectedDataSourceIds)
+      );
+    } catch (error) {
+      console.warn("Unable to save persisted AI Assist tables", error);
+    }
+  }, [selectedDataSourceIds]);
+
+  useEffect(() => {
+    if (
+      selectedModel === DEFAULT_MODEL_VALUE ||
+      loadingModels ||
+      models.length === 0 ||
+      models.some((model) => model.id === selectedModel)
+    ) {
+      return;
+    }
+
+    setSelectedModel(DEFAULT_MODEL_VALUE);
+  }, [loadingModels, models, selectedModel]);
 
   useEffect(() => {
     let cancelled = false;
@@ -308,6 +368,12 @@ export function AiSqlAssistant({
           <Textarea
             value={request}
             onChange={(e) => setRequest(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && e.metaKey) {
+                e.preventDefault();
+                void handleDraft();
+              }
+            }}
             placeholder="e.g. Show monthly revenue by region for the last year"
             className="min-h-28 resize-none"
             disabled={drafting}
