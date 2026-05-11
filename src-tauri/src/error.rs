@@ -15,7 +15,7 @@ pub enum AppError {
     Json(#[from] serde_json::Error),
 
     #[error("AI assistant error: {0}")]
-    Copilot(#[from] copilot_sdk::CopilotError),
+    Copilot(#[from] copilot_sdk::Error),
 
     #[error("{0}")]
     General(String),

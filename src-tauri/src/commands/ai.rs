@@ -1,7 +1,14 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use copilot_sdk::{Client, SessionConfig, SessionEventData, SystemMessageConfig, SystemMessageMode};
+use copilot_sdk::{
+    generated::{
+        AssistantMessageData, AssistantMessageDeltaData, AssistantReasoningData,
+        AssistantReasoningDeltaData, AssistantUsageData, SessionErrorData, SessionModelChangeData,
+        SessionStartData,
+    },
+    Client, ClientOptions, SessionConfig, SystemMessageConfig,
+};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, State};
 
@@ -18,6 +25,21 @@ pub struct AiModel {
     pub name: String,
     pub supported_reasoning_efforts: Option<Vec<String>>,
     pub default_reasoning_effort: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct AiModelListResponse {
+    models: Vec<AiModelResponse>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AiModelResponse {
+    id: String,
+    name: String,
+    #[serde(default)]
+    supported_reasoning_efforts: Vec<String>,
+    default_reasoning_effort: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -79,25 +101,29 @@ pub struct AiDraftProgress {
 
 #[tauri::command]
 pub async fn list_ai_models() -> Result<Vec<AiModel>, AppError> {
-    let client = build_copilot_client()?;
-    client.start().await?;
+    let client = build_copilot_client().await?;
     let result = async {
-        let models = client.list_models().await?;
-        Ok::<_, AppError>(
-            models
-                .into_iter()
-                .map(|model| AiModel {
-                    id: model.id,
-                    name: model.name,
-                    supported_reasoning_efforts: model.supported_reasoning_efforts,
-                    default_reasoning_effort: model.default_reasoning_effort,
-                })
-                .collect(),
-        )
+        let response = client
+            .call("models.list", Some(serde_json::json!({})))
+            .await?;
+        parse_ai_models(response)
     }
     .await;
-    client.stop().await;
-    result
+    stop_copilot_client(&client, result).await
+}
+
+fn parse_ai_models(response: serde_json::Value) -> Result<Vec<AiModel>, AppError> {
+    let model_list: AiModelListResponse = serde_json::from_value(response)?;
+    Ok(model_list
+        .models
+        .into_iter()
+        .map(|model| AiModel {
+            id: model.id,
+            name: model.name,
+            supported_reasoning_efforts: Some(model.supported_reasoning_efforts),
+            default_reasoning_effort: model.default_reasoning_effort,
+        })
+        .collect())
 }
 
 #[tauri::command]
@@ -137,7 +163,7 @@ pub async fn draft_sql_query(
     }
 
     let prompt = build_sql_prompt(&request, current_sql.as_deref(), &context)?;
-    let client = build_copilot_client()?;
+    let client = build_copilot_client().await?;
     emit_progress(
         &app,
         &request_id,
@@ -149,24 +175,20 @@ pub async fn draft_sql_query(
         None,
         None,
     );
-    client.start().await?;
     let requested_model = model.filter(|value| !value.trim().is_empty());
     let result = async {
-        let session = client
-            .create_session(SessionConfig {
-                model: requested_model.clone(),
-                available_tools: Some(vec![]),
-                request_permission: Some(false),
-                client_name: Some("data-explorer-sql-assistant".to_string()),
-                system_message: Some(SystemMessageConfig {
-                    mode: Some(SystemMessageMode::Replace),
-                    content: Some(
-                        "You are a SQL assistant for a DuckDB data exploration app. Draft a single read-only DuckDB SQL query. Use only the table names and columns provided by the app context. Return SQL only, with no markdown fences, explanations, or commentary.".to_string(),
-                    ),
-                }),
-                ..Default::default()
-            })
-            .await?;
+        let mut config = SessionConfig::default()
+            .with_available_tools(Vec::<String>::new())
+            .with_excluded_tools(["shell", "write", "edit", "read", "grep", "glob"])
+            .with_client_name("data-explorer-sql-assistant")
+            .with_system_message(
+                SystemMessageConfig::new()
+                    .with_mode("replace")
+                    .with_content("You are a SQL assistant for a DuckDB data exploration app. Draft a single read-only DuckDB SQL query. Use only the table names and columns provided by the app context. Return SQL only, with no markdown fences, explanations, or commentary."),
+            );
+        config.model = requested_model.clone();
+        config.request_permission = Some(false);
+        let session = client.create_session(config).await?;
         let model_label = requested_model
             .as_deref()
             .unwrap_or("the Copilot default model");
@@ -219,8 +241,7 @@ pub async fn draft_sql_query(
         Ok::<_, AppError>(response)
     }
     .await;
-    client.stop().await;
-    result
+    stop_copilot_client(&client, result).await
 }
 
 #[tauri::command]
@@ -297,17 +318,29 @@ fn save_ai_assist_history(
     Ok(())
 }
 
-fn build_copilot_client() -> Result<Client, AppError> {
-    Ok(Client::builder()
-        .use_stdio(true)
-        .deny_tools(["shell", "write", "edit", "read", "grep", "glob"])
-        .build()?)
+async fn build_copilot_client() -> Result<Client, AppError> {
+    Client::start(ClientOptions::default()).await.map_err(AppError::from)
+}
+
+async fn stop_copilot_client<T>(
+    client: &Client,
+    result: Result<T, AppError>,
+) -> Result<T, AppError> {
+    let stop_result = client
+        .stop()
+        .await
+        .map_err(|err| AppError::General(format!("Failed to stop AI assistant: {err}")));
+    match (result, stop_result) {
+        (Ok(value), Ok(())) => Ok(value),
+        (Err(err), _) => Err(err),
+        (Ok(_), Err(err)) => Err(err),
+    }
 }
 
 async fn collect_sql_draft_with_progress(
     app: &AppHandle,
     request_id: &str,
-    session: &copilot_sdk::Session,
+    session: &copilot_sdk::session::Session,
     prompt: String,
 ) -> Result<(String, Option<String>, Option<AiTokenUsage>), AppError> {
     let mut events = session.subscribe();
@@ -321,16 +354,19 @@ async fn collect_sql_draft_with_progress(
     tokio::time::timeout(SQL_DRAFT_TIMEOUT, async {
         loop {
             match events.recv().await {
-                Ok(event) => match &event.data {
-                    SessionEventData::SessionStart(start) => {
+                Ok(event) => match event.event_type.as_str() {
+                    "session.start" => {
+                        let start: SessionStartData = serde_json::from_value(event.data.clone())?;
                         if observed_model.is_none() {
                             observed_model = start.selected_model.clone();
                         }
                     }
-                    SessionEventData::SessionModelChange(change) => {
+                    "session.model_change" => {
+                        let change: SessionModelChangeData =
+                            serde_json::from_value(event.data.clone())?;
                         observed_model = Some(change.new_model.clone());
                     }
-                    SessionEventData::AssistantTurnStart(_) => emit_progress(
+                    "assistant.turn_start" => emit_progress(
                         app,
                         request_id,
                         "status",
@@ -341,35 +377,39 @@ async fn collect_sql_draft_with_progress(
                         None,
                         None,
                     ),
-                    SessionEventData::AssistantReasoningDelta(delta) => emit_progress(
-                        app,
-                        request_id,
-                        "reasoning",
-                        None,
-                        Some(&delta.delta_content),
-                        None,
-                        None,
-                        None,
-                        None,
-                    ),
-                    SessionEventData::AssistantReasoning(reasoning) => {
-                        let delta = reasoning
-                            .chunk_content
-                            .as_deref()
-                            .unwrap_or(&reasoning.content);
+                    "assistant.reasoning_delta" => {
+                        let delta: AssistantReasoningDeltaData =
+                            serde_json::from_value(event.data.clone())?;
                         emit_progress(
                             app,
                             request_id,
                             "reasoning",
                             None,
-                            Some(delta),
+                            Some(&delta.delta_content),
                             None,
                             None,
                             None,
                             None,
                         );
                     }
-                    SessionEventData::AssistantMessageDelta(delta) => {
+                    "assistant.reasoning" => {
+                        let reasoning: AssistantReasoningData =
+                            serde_json::from_value(event.data.clone())?;
+                        emit_progress(
+                            app,
+                            request_id,
+                            "reasoning",
+                            None,
+                            Some(&reasoning.content),
+                            None,
+                            None,
+                            None,
+                            None,
+                        );
+                    }
+                    "assistant.message_delta" => {
+                        let delta: AssistantMessageDeltaData =
+                            serde_json::from_value(event.data.clone())?;
                         saw_message_delta = true;
                         content.push_str(&delta.delta_content);
                         emit_progress(
@@ -384,7 +424,9 @@ async fn collect_sql_draft_with_progress(
                             None,
                         );
                     }
-                    SessionEventData::AssistantMessage(message) => {
+                    "assistant.message" => {
+                        let message: AssistantMessageData =
+                            serde_json::from_value(event.data.clone())?;
                         if !saw_message_delta {
                             content.push_str(&message.content);
                             emit_progress(
@@ -400,9 +442,10 @@ async fn collect_sql_draft_with_progress(
                             );
                         }
                     }
-                    SessionEventData::AssistantUsage(usage) => {
+                    "assistant.usage" => {
+                        let usage: AssistantUsageData = serde_json::from_value(event.data.clone())?;
                         if observed_model.is_none() {
-                            observed_model = usage.model.clone();
+                            observed_model = Some(usage.model.clone());
                         }
                         token_usage = Some(AiTokenUsage {
                             input_tokens: usage.input_tokens,
@@ -429,8 +472,9 @@ async fn collect_sql_draft_with_progress(
                             usage.cache_write_tokens,
                         );
                     }
-                    SessionEventData::SessionIdle(_) => break,
-                    SessionEventData::SessionError(err) => {
+                    "session.idle" => break,
+                    "session.error" => {
+                        let err: SessionErrorData = serde_json::from_value(event.data.clone())?;
                         return Err(AppError::General(format!(
                             "AI assistant session error: {}",
                             err.message
@@ -593,4 +637,36 @@ fn normalize_sql_draft(response: &str) -> String {
         }
     }
     trimmed.to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_ai_models_ignores_incomplete_billing_metadata() {
+        let models = parse_ai_models(serde_json::json!({
+            "models": [
+                {
+                    "id": "gpt-5.5",
+                    "name": "GPT-5.5",
+                    "billing": {},
+                    "supportedReasoningEfforts": ["low", "medium"],
+                    "defaultReasoningEffort": "medium"
+                }
+            ]
+        }))
+        .expect("model list should parse");
+
+        assert_eq!(models.len(), 1);
+        assert_eq!(models[0].id, "gpt-5.5");
+        assert_eq!(
+            models[0].supported_reasoning_efforts.as_deref(),
+            Some(["low".to_string(), "medium".to_string()].as_slice())
+        );
+        assert_eq!(
+            models[0].default_reasoning_effort.as_deref(),
+            Some("medium")
+        );
+    }
 }
