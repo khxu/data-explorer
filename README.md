@@ -1,6 +1,6 @@
 # Data Explorer
 
-A local desktop app for querying data files with [DuckDB](https://duckdb.org/). Point it at Parquet, CSV, or JSON files on your machine, organize them with tags and projects, write SQL, and export results — all without uploading anything or spinning up a server.
+A local desktop app for querying data files with [DuckDB](https://duckdb.org/). Point it at Parquet, CSV, or JSON files on your machine, organize them with tags and projects, write SQL, draft SQL with GitHub Copilot, run Copilot models across rows, and export results — all without spinning up a server.
 
 Built with [Tauri v2](https://tauri.app/) + React + TypeScript on the frontend and Rust on the backend.
 
@@ -11,7 +11,7 @@ Built with [Tauri v2](https://tauri.app/) + React + TypeScript on the frontend a
 - [Node.js](https://nodejs.org/) (v24+)
 - [Rust](https://www.rust-lang.org/tools/install) (stable)
 - Tauri v2 system dependencies — see the [Tauri prerequisites guide](https://v2.tauri.app/start/prerequisites/)
-- Optional for AI Assist: a working GitHub Copilot CLI setup with access to Copilot models
+- Optional for AI features: a working GitHub Copilot CLI setup with access to Copilot models
 
 ### Install & Run
 
@@ -93,7 +93,55 @@ While a draft is running, the sidebar shows progress messages and, when availabl
 
 AI Assist drafts are also saved in history with the original prompt, generated SQL, model information, token usage, and timestamp. Open the **History** tab, switch to **AI Assist**, and click **Reuse SQL** to load a prior draft into the active query tab.
 
-### 4. Organize with Tags
+### 4. Process Rows with LLM Runs
+
+LLM Runs apply one or more Copilot models to each row from a data source or SQL query result. This is useful for classification, extraction, summarization, enrichment, or any workflow where each row should receive a model-generated output.
+
+1. Click the **LLM Runs** tab
+2. Click **New**, name the experiment, and choose an input:
+   - **Data source** to process rows directly from a registered file
+   - **SQL result** to process rows after filtering, joining, aggregating, or reshaping them with DuckDB
+3. Click **Preview columns** to inspect the input columns
+4. Select the columns that may be sent to Copilot
+5. Write a **System prompt** and/or **User prompt**
+6. Use `{{column_name}}` placeholders to interpolate values from the current row
+7. Select one or more Copilot models
+8. Click **Save** to store the experiment, or **Run** to save and start processing
+
+For every selected row and model, Data Explorer renders the prompts, sends the request through `copilot-sdk`, and stores the rendered prompts, output or error, status, latency, token usage when available, and source row snapshot in SQLite.
+
+#### Prompt Templates
+
+Prompt templates use double-curly placeholders that match selected input columns:
+
+```text
+Classify this support ticket.
+
+Ticket ID: {{ticket_id}}
+Subject: {{subject}}
+Body: {{body}}
+```
+
+Column chips appear after previewing input columns. Click a chip to insert that placeholder into the user prompt. The editor warns when a prompt references a placeholder that is not in the current selected columns.
+
+#### Progress, Resume, and Retry
+
+Runs show progress as completed / total row-model tasks, plus failures. A run can be paused, canceled, resumed, or retried for failed items. If the app exits while a run is active, the next startup marks that run as paused so it can be resumed instead of silently losing state.
+
+The first implementation runs row-model tasks sequentially for predictable progress and cancellation behavior. The schema stores each result independently, so bounded concurrency can be added later.
+
+#### Results and Export
+
+Run results are displayed as a pivoted table:
+
+- Source row columns appear first
+- Each selected Copilot model appears as an output column
+- Click an output cell to inspect rendered system/user prompts, the full output or error, status, and latency
+- Use **Export CSV** or **Export JSON** to download the current run results, including source columns, per-model status/output/error, and latency metadata
+
+Only the columns selected in the experiment are included in rendered prompts and result exports.
+
+### 5. Organize with Tags
 
 Tags let you categorize data sources across projects.
 
@@ -102,7 +150,7 @@ Tags let you categorize data sources across projects.
 3. Assign tags when registering a data source, or edit them later via the **🏷** button on any source
 4. Tags appear as colored badges in the sidebar
 
-### 5. Create Projects
+### 6. Create Projects
 
 Projects are saved views that filter data sources by tags. A data source can appear in multiple projects.
 
@@ -113,7 +161,7 @@ Projects are saved views that filter data sources by tags. A data source can app
 
 For example, a project called "Q4 Analysis" might filter on tags "q4" and "revenue", showing only the data sources relevant to that work.
 
-### 6. Export Results
+### 7. Export Query Results
 
 After running a query, you can save the results to a new file.
 
@@ -125,9 +173,9 @@ After running a query, you can save the results to a new file.
 
 **Safety guardrail:** Data Explorer will never overwrite an existing file or write to a path that matches a registered data source. Exports always create new files.
 
-### 7. Browse & Manage History
+### 8. Browse & Manage History
 
-Every query you run is logged with its SQL, status, timing, and a small result sample. AI Assist drafts are logged separately with the prompt, generated SQL, model details, and token usage.
+Every query you run is logged with its SQL, status, timing, and a small result sample. AI Assist drafts are logged separately with the prompt, generated SQL, model details, and token usage. LLM Runs are tracked from the **LLM Runs** tab with their own experiment list, run history, status, and stored per-row/per-model results.
 
 1. Click the **History** tab
 2. Switch between **Queries** and **AI Assist**
@@ -135,6 +183,7 @@ Every query you run is logged with its SQL, status, timing, and a small result s
 4. Browse past AI Assist drafts — entries show the prompt, generated SQL, model, token usage, and timestamp
 5. Click **Reuse** or **Reuse SQL** on any entry to load its SQL back into the active query tab and switch to the Query tab
 6. Clear query history or AI Assist history independently from the active history view
+7. Use the **LLM Runs** tab for row-processing run history and result exports
 
 ---
 
@@ -145,7 +194,7 @@ Every query you run is logged with its SQL, status, timing, and a small result s
 │  React Frontend (shadcn/ui)         │
 │  ┌───────┐ ┌──────┐ ┌───────────┐  │
 │  │Query  │ │Side- │ │ History   │  │
-│  │Editor │ │bar   │ │ Panel     │  │
+│  │Editor │ │bar   │ │ + LLM Runs│  │
 │  └───┬───┘ └──┬───┘ └─────┬─────┘  │
 │      └────────┴────────────┘        │
 │               │ invoke()            │
@@ -157,15 +206,16 @@ Every query you run is logged with its SQL, status, timing, and a small result s
 │  │ DuckDB   │  SQLite        │      │
 │  │ (queries)│  (metadata,    │      │
 │  │          │   history,     │      │
-│  │          │   query tabs)  │      │
+│  │          │   query tabs,  │      │
+│  │          │   LLM runs)    │      │
 │  └──────────┴────────────────┘      │
 └─────────────────────────────────────┘
 ```
 
-- **DuckDB** runs in-memory in the Rust backend. Registered files are wrapped as CTEs (`WITH tablename AS (SELECT * FROM read_parquet(...))`) before each query, so changes to the underlying files are picked up automatically.
-- **SQLite** stores all persistent metadata: registered data sources, tags, projects, query tabs, query history (with truncated result samples to keep the database small), and AI Assist history.
+- **DuckDB** runs in-memory in the Rust backend. Registered files are wrapped as CTEs (`WITH tablename AS (SELECT * FROM read_parquet(...))`) before each query, so changes to the underlying files are picked up automatically. LLM Runs can also materialize input rows from either a registered file or a SQL result.
+- **SQLite** stores all persistent metadata: registered data sources, tags, projects, query tabs, query history (with truncated result samples to keep the database small), AI Assist history, LLM experiments, LLM run state, and row-model results.
 - **Tauri** bridges the frontend and backend via typed `invoke()` commands with native OS file dialogs for picking files and save locations.
-- **GitHub Copilot SDK** powers AI Assist by sending selected schema/sample context and prompt text to the chosen Copilot model.
+- **GitHub Copilot SDK** powers AI Assist and LLM Runs. AI Assist sends selected schema/sample context and prompt text to the chosen Copilot model; LLM Runs send rendered per-row prompts to each selected model with shell/read/write/edit/search tools disabled.
 
 ## Supported File Formats
 
@@ -186,23 +236,27 @@ Every query you run is logged with its SQL, status, timing, and a small result s
 
 ```
 src/                          # React frontend
-├── components/               # UI components (Sidebar, QueryEditor, QueryTabBar, AiSqlAssistant, HistoryPanel, dialogs)
+├── components/               # UI components (Sidebar, QueryEditor, QueryTabBar, AiSqlAssistant, LlmRunsPanel, HistoryPanel, dialogs)
 ├── components/ui/            # shadcn/ui primitives
 ├── hooks/useAppState.tsx     # Global app state context
-└── lib/api.ts                # Typed wrappers for Tauri invoke() calls
+└── lib/                      # Typed invoke() wrappers and frontend helpers
+    ├── api.ts                # Tauri command API wrappers
+    └── promptTemplate.ts     # Prompt placeholder extraction and validation
 
 src-tauri/src/                # Rust backend
 ├── lib.rs                    # Tauri app setup and state management
 ├── db.rs                     # SQLite connection and migrations
 ├── duckdb_engine.rs          # DuckDB connection and CTE-based query wrapping
 ├── error.rs                  # Error types
+├── prompt_template.rs        # Backend prompt interpolation for row processing
 └── commands/                 # Tauri command handlers
     ├── data_sources.rs       # Register/remove/refresh/list data files
     ├── tags.rs               # Tag CRUD and assignment
     ├── projects.rs           # Project CRUD (tag-based filters)
     ├── queries.rs            # Execute SQL, query history, query tab persistence
-    ├── export.rs             # Export results with overwrite protection
-    └── ai.rs                 # AI SQL drafting, progress events, and AI Assist history
+    ├── export.rs             # Export query results with overwrite protection
+    ├── ai.rs                 # AI SQL drafting, progress events, and AI Assist history
+    └── llm_runs.rs           # LLM experiment CRUD, row materialization, Copilot execution, and run history
 ```
 
 ### Key Commands
