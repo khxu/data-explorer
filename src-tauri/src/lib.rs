@@ -2,6 +2,7 @@ mod commands;
 mod db;
 mod duckdb_engine;
 mod error;
+mod prompt_template;
 
 use std::sync::Arc;
 use tauri::Manager;
@@ -12,6 +13,7 @@ use duckdb_engine::DuckDbEngine;
 use commands::ai::*;
 use commands::data_sources::*;
 use commands::export::*;
+use commands::llm_runs::*;
 use commands::projects::*;
 use commands::queries::*;
 use commands::tags::*;
@@ -29,6 +31,14 @@ pub fn run() {
 
             let database = Database::new(app_dir).expect("failed to initialize SQLite database");
             let duckdb = DuckDbEngine::new().expect("failed to initialize DuckDB engine");
+
+            {
+                let conn = database.conn.lock().unwrap();
+                let _ = conn.execute(
+                    "UPDATE llm_runs SET status = 'paused', requested_action = NULL WHERE status = 'running'",
+                    [],
+                );
+            }
 
             // Re-register all existing data sources into DuckDB on startup
             {
@@ -81,6 +91,17 @@ pub fn run() {
             draft_sql_query,
             get_ai_assist_history,
             clear_ai_assist_history,
+            list_llm_experiments,
+            save_llm_experiment,
+            delete_llm_experiment,
+            preview_llm_input,
+            list_llm_runs,
+            get_llm_run_results,
+            start_llm_run,
+            pause_llm_run,
+            cancel_llm_run,
+            resume_llm_run,
+            retry_failed_llm_run,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

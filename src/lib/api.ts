@@ -299,3 +299,139 @@ export async function exportResults(
     resultTableName: resultTableName ?? null,
   });
 }
+
+// -- LLM Runs --
+
+export interface LlmExperiment {
+  id: string;
+  name: string;
+  input_source_type: "data_source" | "sql";
+  data_source_id: string | null;
+  sql_text: string | null;
+  selected_columns: string[];
+  system_prompt: string;
+  user_prompt: string;
+  models: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LlmExperimentDraft {
+  id?: string | null;
+  name: string;
+  input_source_type: "data_source" | "sql";
+  data_source_id?: string | null;
+  sql_text?: string | null;
+  selected_columns: string[];
+  system_prompt: string;
+  user_prompt: string;
+  models: string[];
+}
+
+export interface LlmRun {
+  id: string;
+  experiment_id: string;
+  experiment_name: string;
+  status: string;
+  total_count: number;
+  completed_count: number;
+  failed_count: number;
+  requested_action: string | null;
+  started_at: string;
+  completed_at: string | null;
+}
+
+export interface LlmRunResult {
+  id: string;
+  run_id: string;
+  experiment_id: string;
+  row_index: number;
+  model: string;
+  status: string;
+  source_row: string;
+  input_system: string | null;
+  input_user: string | null;
+  output: string | null;
+  error: string | null;
+  token_usage: string | null;
+  latency_ms: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LlmInputPreview {
+  columns: string[];
+  column_types: string[];
+  rows: unknown[][];
+}
+
+export interface LlmRunProgress {
+  run_id: string;
+  experiment_id: string;
+  kind: string;
+  status: string;
+  row_index: number | null;
+  model: string | null;
+  completed_count: number;
+  failed_count: number;
+  total_count: number;
+  message: string | null;
+}
+
+export async function listLlmExperiments(): Promise<LlmExperiment[]> {
+  return invoke("list_llm_experiments");
+}
+
+export async function saveLlmExperiment(
+  draft: LlmExperimentDraft
+): Promise<LlmExperiment> {
+  return invoke("save_llm_experiment", { draft });
+}
+
+export async function deleteLlmExperiment(id: string): Promise<void> {
+  return invoke("delete_llm_experiment", { id });
+}
+
+export async function previewLlmInput(
+  inputSourceType: "data_source" | "sql",
+  dataSourceId: string | null,
+  sqlText: string | null,
+  selectedColumns: string[],
+  limit = 25
+): Promise<LlmInputPreview> {
+  return invoke("preview_llm_input", {
+    inputSourceType,
+    dataSourceId,
+    sqlText,
+    selectedColumns,
+    limit,
+  });
+}
+
+export async function listLlmRuns(): Promise<LlmRun[]> {
+  return invoke("list_llm_runs");
+}
+
+export async function getLlmRunResults(runId: string): Promise<LlmRunResult[]> {
+  return invoke("get_llm_run_results", { runId });
+}
+
+export async function startLlmRun(experimentId: string): Promise<LlmRun> {
+  return invoke("start_llm_run", { experimentId });
+}
+
+export async function pauseLlmRun(runId: string): Promise<void> {
+  return invoke("pause_llm_run", { runId });
+}
+
+export async function cancelLlmRun(runId: string): Promise<void> {
+  return invoke("cancel_llm_run", { runId });
+}
+
+export async function resumeLlmRun(runId: string): Promise<LlmRun> {
+  return invoke("resume_llm_run", { runId });
+}
+
+export async function retryFailedLlmRun(runId: string): Promise<LlmRun> {
+  return invoke("retry_failed_llm_run", { runId });
+}

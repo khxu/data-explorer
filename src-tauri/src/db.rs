@@ -86,6 +86,61 @@ impl Database {
                 is_active INTEGER NOT NULL DEFAULT 0,
                 updated_at TEXT NOT NULL DEFAULT (datetime('now'))
             );
+
+            CREATE TABLE IF NOT EXISTS llm_experiments (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                input_source_type TEXT NOT NULL,
+                data_source_id TEXT REFERENCES data_sources(id) ON DELETE SET NULL,
+                sql_text TEXT,
+                selected_columns TEXT NOT NULL DEFAULT '[]',
+                system_prompt TEXT NOT NULL DEFAULT '',
+                user_prompt TEXT NOT NULL DEFAULT '',
+                models TEXT NOT NULL DEFAULT '[]',
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS llm_runs (
+                id TEXT PRIMARY KEY,
+                experiment_id TEXT NOT NULL REFERENCES llm_experiments(id) ON DELETE CASCADE,
+                status TEXT NOT NULL,
+                total_count INTEGER NOT NULL DEFAULT 0,
+                completed_count INTEGER NOT NULL DEFAULT 0,
+                failed_count INTEGER NOT NULL DEFAULT 0,
+                requested_action TEXT,
+                started_at TEXT NOT NULL DEFAULT (datetime('now')),
+                completed_at TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS llm_run_results (
+                id TEXT PRIMARY KEY,
+                run_id TEXT NOT NULL REFERENCES llm_runs(id) ON DELETE CASCADE,
+                experiment_id TEXT NOT NULL REFERENCES llm_experiments(id) ON DELETE CASCADE,
+                row_index INTEGER NOT NULL,
+                model TEXT NOT NULL,
+                status TEXT NOT NULL,
+                source_row TEXT NOT NULL,
+                input_system TEXT,
+                input_user TEXT,
+                output TEXT,
+                error TEXT,
+                token_usage TEXT,
+                latency_ms INTEGER,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+                UNIQUE(run_id, row_index, model)
+            );
+
+            CREATE TABLE IF NOT EXISTS llm_logs (
+                id TEXT PRIMARY KEY,
+                run_id TEXT REFERENCES llm_runs(id) ON DELETE CASCADE,
+                experiment_id TEXT REFERENCES llm_experiments(id) ON DELETE CASCADE,
+                level TEXT NOT NULL,
+                message TEXT NOT NULL,
+                metadata TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
             ",
         )?;
 

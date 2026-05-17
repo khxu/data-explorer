@@ -135,6 +135,25 @@ impl DuckDbEngine {
     ) -> Result<SourcePreview, AppError> {
         let read_fn = Self::read_fn_for(file_path, file_format)?;
         let sql = format!("SELECT * FROM {} LIMIT {}", read_fn, limit);
+        self.query_raw_rows(&sql)
+    }
+
+    pub fn source_rows(
+        &self,
+        file_path: &str,
+        file_format: &str,
+        limit: Option<usize>,
+    ) -> Result<SourcePreview, AppError> {
+        let read_fn = Self::read_fn_for(file_path, file_format)?;
+        let sql = if let Some(limit) = limit {
+            format!("SELECT * FROM {} LIMIT {}", read_fn, limit)
+        } else {
+            format!("SELECT * FROM {}", read_fn)
+        };
+        self.query_raw_rows(&sql)
+    }
+
+    fn query_raw_rows(&self, sql: &str) -> Result<SourcePreview, AppError> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(&sql)?;
         let mut result_rows = stmt.query([])?;
@@ -167,6 +186,60 @@ impl DuckDbEngine {
                 )
             })
             .collect();
+
+        Ok(SourcePreview { columns, rows })
+    }
+
+    pub fn query_rows(&self, user_sql: &str, limit: Option<usize>) -> Result<SourcePreview, AppError> {
+        let wrapped_sql = self.wrap_query_for_embedding(user_sql)?;
+        let sql = if let Some(limit) = limit {
+            format!("SELECT * FROM ({}) AS llm_input LIMIT {}", wrapped_sql, limit)
+        } else {
+            wrapped_sql
+        };
+        let temp_table = format!("__llm_input_{}", uuid::Uuid::new_v4().simple());
+        let create_sql = format!("CREATE TEMP TABLE \"{}\" AS {}", temp_table, sql);
+        let conn = self.conn.lock().unwrap();
+        conn.execute_batch(&create_sql)?;
+
+        let select_sql = format!("SELECT * FROM \"{}\"", temp_table);
+        let mut stmt = conn.prepare(&select_sql)?;
+        let mut result_rows = stmt.query([])?;
+        let mut rows = Vec::new();
+        let mut column_count = 0;
+
+        while let Some(row) = result_rows.next()? {
+            if column_count == 0 {
+                column_count = row.as_ref().column_count();
+            }
+            let mut row_data = Vec::with_capacity(column_count);
+            for i in 0..column_count {
+                let val: duckdb::types::Value = row.get(i)?;
+                row_data.push(Self::duckdb_value_to_json(val));
+            }
+            rows.push(row_data);
+        }
+
+        drop(result_rows);
+
+        if column_count == 0 {
+            column_count = stmt.column_count();
+        }
+        let columns = (0..column_count)
+            .map(|i| {
+                (
+                    stmt.column_name(i)
+                        .map_or("?".to_string(), |name| name.to_string()),
+                    format!("{}", stmt.column_type(i)),
+                )
+            })
+            .collect();
+
+        drop(stmt);
+        conn.execute_batch(&format!(
+            "DROP TABLE IF EXISTS {}",
+            Self::quote_identifier(&temp_table)
+        ))?;
 
         Ok(SourcePreview { columns, rows })
     }

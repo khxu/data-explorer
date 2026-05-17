@@ -6,6 +6,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { QueryEditor } from "@/components/QueryEditor";
 import { QueryTabBar } from "@/components/QueryTabBar";
 import { HistoryPanel } from "@/components/HistoryPanel";
+import { LlmRunsPanel } from "@/components/LlmRunsPanel";
 import "./App.css";
 
 const SIDEBAR_WIDTH_STORAGE_KEY = "data-explorer.sidebarWidth";
@@ -87,6 +88,7 @@ function AppContent() {
             <TabsTrigger value="history">
               History
             </TabsTrigger>
+            <TabsTrigger value="llm-runs">LLM Runs</TabsTrigger>
           </TabsList>
           <TabsContent value="query" className="flex-1 min-h-0 mt-0 flex flex-col">
             <QueryTabBar />
@@ -96,6 +98,9 @@ function AppContent() {
           </TabsContent>
           <TabsContent value="history" className="flex-1 min-h-0 mt-0">
             <HistoryPanel />
+          </TabsContent>
+          <TabsContent value="llm-runs" className="flex-1 min-h-0 mt-0">
+            <LlmRunsPanel />
           </TabsContent>
         </Tabs>
       </main>
