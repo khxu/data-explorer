@@ -32,6 +32,22 @@ export type QueryTabDropPosition = "before" | "after";
 
 export const ALL_QUERY_TAB_PROJECTS = "__all__";
 export const UNASSIGNED_QUERY_TAB_PROJECT = "__unassigned__";
+const QUERY_TAB_PROJECT_FILTER_STORAGE_KEY = "data-explorer.queryTabProjectFilter";
+
+function isBuiltInQueryTabProjectFilter(filter: string) {
+  return filter === ALL_QUERY_TAB_PROJECTS || filter === UNASSIGNED_QUERY_TAB_PROJECT;
+}
+
+function loadPersistedQueryTabProjectFilter() {
+  if (typeof window === "undefined") return ALL_QUERY_TAB_PROJECTS;
+
+  try {
+    return window.localStorage.getItem(QUERY_TAB_PROJECT_FILTER_STORAGE_KEY) ?? ALL_QUERY_TAB_PROJECTS;
+  } catch (error) {
+    console.warn("Unable to load persisted query tab project filter", error);
+    return ALL_QUERY_TAB_PROJECTS;
+  }
+}
 
 export function queryTabMatchesProjectFilter(tab: QueryTab, filter: string) {
   if (filter === ALL_QUERY_TAB_PROJECTS) return true;
@@ -94,6 +110,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [dataSourceSchemas, setDataSourceSchemas] = useState<DataSourceSchema[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [projectsLoaded, setProjectsLoaded] = useState(false);
   const [queryHistory, setQueryHistory] = useState<QueryHistoryEntry[]>([]);
   const [aiAssistHistory, setAiAssistHistory] = useState<AiAssistHistoryEntry[]>([]);
   const [activeProject, setActiveProject] = useState<Project | null>(null);
@@ -101,7 +118,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const [queryTabs, setQueryTabs] = useState<QueryTab[]>(() => [makeTab()]);
   const [activeQueryTabId, setActiveQueryTabId] = useState(() => queryTabs[0]?.id ?? "");
-  const [queryTabProjectFilter, setQueryTabProjectFilter] = useState(ALL_QUERY_TAB_PROJECTS);
+  const [queryTabProjectFilter, setQueryTabProjectFilter] = useState(
+    loadPersistedQueryTabProjectFilter
+  );
   const tabsLoaded = useRef(false);
 
   const [error, setError] = useState<string | null>(null);
@@ -163,13 +182,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (
-      queryTabProjectFilter !== ALL_QUERY_TAB_PROJECTS &&
-      queryTabProjectFilter !== UNASSIGNED_QUERY_TAB_PROJECT &&
+      projectsLoaded &&
+      !isBuiltInQueryTabProjectFilter(queryTabProjectFilter) &&
       !projects.some((project) => project.id === queryTabProjectFilter)
     ) {
       setQueryTabProjectFilter(ALL_QUERY_TAB_PROJECTS);
     }
-  }, [projects, queryTabProjectFilter]);
+  }, [projects, projectsLoaded, queryTabProjectFilter]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        QUERY_TAB_PROJECT_FILTER_STORAGE_KEY,
+        queryTabProjectFilter
+      );
+    } catch (error) {
+      console.warn("Unable to save persisted query tab project filter", error);
+    }
+  }, [queryTabProjectFilter]);
 
   const addQueryTab = useCallback((sql?: string, projectId?: string | null) => {
     const defaultProjectId =
@@ -294,6 +324,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const refreshProjects = useCallback(async () => {
     try {
       setProjects(await listProjects());
+      setProjectsLoaded(true);
     } catch (e) {
       setError(String(e));
     }
