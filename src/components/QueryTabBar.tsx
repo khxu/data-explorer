@@ -241,7 +241,7 @@ export function QueryTabBar() {
           </>
         )}
       </div>
-      <div className="flex items-center gap-0.5 px-3 pt-1 overflow-x-auto">
+      <div className="query-tabs-scrollbar flex min-w-0 items-center gap-0.5 overflow-x-auto overflow-y-hidden px-3 pt-1">
         {filteredTabs.map((tab) => {
           const isActive = tab.id === activeQueryTabId;
           const isEditing = editingId === tab.id;
@@ -255,7 +255,7 @@ export function QueryTabBar() {
                 <div
                   data-query-tab-id={tab.id}
                   aria-grabbed={isDragging}
-                  className={`group flex items-center gap-1 px-2 py-1 rounded-t text-sm cursor-pointer border border-b-0 transition-opacity ${
+                  className={`group flex shrink-0 items-center gap-1 whitespace-nowrap px-2 py-1 rounded-t text-sm cursor-pointer border border-b-0 transition-opacity ${
                     isActive
                       ? "bg-background border-border"
                       : "bg-muted/40 border-transparent hover:bg-muted/60"
@@ -298,18 +298,14 @@ export function QueryTabBar() {
                       onClick={(e) => e.stopPropagation()}
                     />
                   ) : draggingTabId ? (
-                    <span
-                      className="truncate max-w-[120px] select-none"
-                    >
+                    <span className="select-none whitespace-nowrap">
                       {tab.name}
                     </span>
                   ) : (
                     <TooltipProvider delayDuration={500}>
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <span
-                            className="truncate max-w-[120px] select-none"
-                          >
+                          <span className="select-none whitespace-nowrap">
                             {tab.name}
                           </span>
                         </TooltipTrigger>
@@ -329,7 +325,7 @@ export function QueryTabBar() {
                   )}
                   {queryTabs.length > 1 && (
                     <button
-                      className="ml-1 text-muted-foreground hover:text-destructive text-xs leading-none opacity-0 group-hover:opacity-100 transition-opacity"
+                      className="ml-1 shrink-0 text-muted-foreground hover:text-destructive text-xs leading-none opacity-0 group-hover:opacity-100 transition-opacity"
                       onPointerDown={(e) => e.stopPropagation()}
                       onClick={(e) => {
                         e.stopPropagation();
@@ -396,7 +392,7 @@ export function QueryTabBar() {
         <Button
           variant="ghost"
           size="sm"
-          className="h-6 w-6 p-0 text-muted-foreground"
+          className="h-6 w-6 shrink-0 p-0 text-muted-foreground"
           onClick={handleAddTab}
           title="New query tab"
         >

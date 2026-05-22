@@ -32,6 +32,7 @@ export function ExportDialog({ open: isOpen, onClose, sql, resultTableName }: Pr
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [destinationNotice, setDestinationNotice] = useState<string | null>(null);
 
   async function pickDestination() {
     const defaultExt = format === "parquet" ? "parquet" : "csv";
@@ -46,6 +47,9 @@ export function ExportDialog({ open: isOpen, onClose, sql, resultTableName }: Pr
     });
     if (result) {
       setDestPath(result);
+      setError(null);
+      setSuccess(null);
+      setDestinationNotice(`Results will be saved to ${result}`);
     }
   }
 
@@ -54,6 +58,7 @@ export function ExportDialog({ open: isOpen, onClose, sql, resultTableName }: Pr
     setLoading(true);
     setError(null);
     setSuccess(null);
+    setDestinationNotice(null);
     try {
       const path = await exportResults(sql, format, destPath, resultTableName);
       setSuccess(`Exported to ${path}`);
@@ -98,6 +103,9 @@ export function ExportDialog({ open: isOpen, onClose, sql, resultTableName }: Pr
             </div>
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
+          {destinationNotice && (
+            <p className="text-sm text-muted-foreground">{destinationNotice}</p>
+          )}
           {success && <p className="text-sm text-green-600">{success}</p>}
         </div>
         <DialogFooter>
