@@ -141,3 +141,11 @@
 .query-progress-indicator {
   animation: query-progress 1.2s ease-in-out infinite;
 }
+
+.query-tabs-scrollbar {
+  scrollbar-width: none;
+}
+
+.query-tabs-scrollbar::-webkit-scrollbar {
+  display: none;
+}
