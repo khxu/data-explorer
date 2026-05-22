@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppState } from "@/hooks/useAppState";
-import { cancelQuery, executeQuery, getStandaloneSql, releaseQueryResult } from "@/lib/api";
+import { cancelQuery, executeQuery, getStandaloneSql, releaseQueryResult, type QueryResult } from "@/lib/api";
+import { isNumericColumnType } from "@/lib/utils";
 import { AiSqlAssistant } from "./AiSqlAssistant";
 import { ExportDialog } from "./ExportDialog";
 import { ResizableResultsTable } from "./ResizableResultsTable";
@@ -29,6 +30,7 @@ export function QueryEditor() {
   const [showExport, setShowExport] = useState(false);
   const [showAssistant, setShowAssistant] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [copiedMarkdown, setCopiedMarkdown] = useState(false);
 
   useEffect(() => {
     if (!running) return;
@@ -121,6 +123,18 @@ export function QueryEditor() {
     }
   }
 
+  async function handleCopyMarkdownTable() {
+    if (!result) return;
+
+    try {
+      await navigator.clipboard.writeText(formatMarkdownTable(result));
+      setCopiedMarkdown(true);
+      setTimeout(() => setCopiedMarkdown(false), 2000);
+    } catch (e) {
+      console.error("Failed to copy markdown table:", e);
+    }
+  }
+
   return (
     <div className="flex h-full min-w-0">
       <div className="flex flex-col h-full min-w-0 flex-1">
@@ -149,13 +163,24 @@ export function QueryEditor() {
                 </Button>
               )}
               {result && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowExport(true)}
-                >
-                  Export
-                </Button>
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowExport(true)}
+                  >
+                    Export
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleCopyMarkdownTable}
+                    disabled={result.columns.length === 0}
+                    title="Copy results to clipboard as a markdown table"
+                  >
+                    {copiedMarkdown ? "✓ Copied" : "Copy as markdown table"}
+                  </Button>
+                </>
               )}
               <Button
                 variant="outline"
@@ -252,4 +277,23 @@ function formatElapsed(ms: number) {
   }
 
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
+function formatMarkdownTable(result: QueryResult) {
+  const header = result.columns.map(formatMarkdownTableCell).join(" | ");
+  const separator = result.columns
+    .map((_, index) => (isNumericColumnType(result.column_types[index]) ? "---:" : "---"))
+    .join(" | ");
+  const rows = result.rows.map((row) =>
+    result.columns.map((_, index) => formatMarkdownTableCell(row[index])).join(" | ")
+  );
+
+  return [`| ${header} |`, `| ${separator} |`, ...rows.map((row) => `| ${row} |`)].join("\n");
+}
+
+function formatMarkdownTableCell(value: unknown) {
+  if (value === null || value === undefined) return "";
+
+  const text = typeof value === "string" ? value : JSON.stringify(value) ?? String(value);
+  return text.replace(/\r?\n/g, "<br>").replace(/\|/g, "\\|");
 }
