@@ -21,6 +21,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import type { QueryResult } from "@/lib/api";
+import { cn, isNumericColumnType } from "@/lib/utils";
 
 interface Props {
   result: QueryResult;
@@ -128,6 +129,11 @@ export function ResizableResultsTable({ result }: Props) {
     };
   }, [result.rows, scrollTop, viewportHeight]);
 
+  const numericColumns = useMemo(
+    () => result.columns.map((_, index) => isNumericColumnType(result.column_types?.[index])),
+    [result.columns, result.column_types]
+  );
+
   function formatCellValue(cell: unknown): string {
     if (cell === null || cell === undefined) return "";
     return String(cell);
@@ -156,29 +162,40 @@ export function ResizableResultsTable({ result }: Props) {
           <Table style={{ tableLayout: "fixed", width: "max-content", minWidth: "100%" }}>
             <TableHeader className="sticky top-0 z-10 bg-background">
               <TableRow className="hover:bg-background">
-                {result.columns.map((col, i) => (
-                  <TableHead
-                    key={i}
-                    className="text-xs font-semibold whitespace-nowrap relative select-none"
-                    style={{ width: columnWidths[i] }}
-                  >
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span className="block truncate pr-2">{col}</span>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom">
-                        <p className="font-mono text-xs">
-                          {col}: <span className="text-muted-foreground">{result.column_types?.[i] ?? "unknown"}</span>
-                        </p>
-                      </TooltipContent>
-                    </Tooltip>
-                    {/* Resize handle */}
-                    <div
-                      className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-primary/20 active:bg-primary/30"
-                      onMouseDown={(e) => handleMouseDown(e, i)}
-                    />
-                  </TableHead>
-                ))}
+                {result.columns.map((col, i) => {
+                  const isNumericColumn = numericColumns[i];
+
+                  return (
+                    <TableHead
+                      key={i}
+                      className="text-xs font-semibold whitespace-nowrap relative select-none"
+                      style={{ width: columnWidths[i] }}
+                    >
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span
+                            className={cn(
+                              "block truncate pr-2",
+                              isNumericColumn && "text-right tabular-nums"
+                            )}
+                          >
+                            {col}
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom">
+                          <p className="font-mono text-xs">
+                            {col}: <span className="text-muted-foreground">{result.column_types?.[i] ?? "unknown"}</span>
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                      {/* Resize handle */}
+                      <div
+                        className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-primary/20 active:bg-primary/30"
+                        onMouseDown={(e) => handleMouseDown(e, i)}
+                      />
+                    </TableHead>
+                  );
+                })}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -196,26 +213,33 @@ export function ResizableResultsTable({ result }: Props) {
 
                 return (
                   <TableRow key={ri} style={{ height: ROW_HEIGHT }}>
-                    {row.map((cell, ci) => (
-                      <TableCell
-                        key={ci}
-                        className="text-xs py-1 whitespace-nowrap truncate cursor-pointer hover:bg-accent/40"
-                        style={{ width: columnWidths[ci], maxWidth: columnWidths[ci] }}
-                        onClick={() =>
-                          setInspectedCell({
-                            column: result.columns[ci],
-                            value: cell === null ? "NULL" : formatCellValue(cell),
-                          })
-                        }
-                        title="Click to inspect"
-                      >
-                        {cell === null ? (
-                          <span className="text-muted-foreground italic">NULL</span>
-                        ) : (
-                          formatCellValue(cell)
-                        )}
-                      </TableCell>
-                    ))}
+                    {row.map((cell, ci) => {
+                      const isNumericColumn = numericColumns[ci];
+
+                      return (
+                        <TableCell
+                          key={ci}
+                          className={cn(
+                            "text-xs py-1 whitespace-nowrap truncate cursor-pointer hover:bg-accent/40",
+                            isNumericColumn && "text-right tabular-nums"
+                          )}
+                          style={{ width: columnWidths[ci], maxWidth: columnWidths[ci] }}
+                          onClick={() =>
+                            setInspectedCell({
+                              column: result.columns[ci],
+                              value: cell === null ? "NULL" : formatCellValue(cell),
+                            })
+                          }
+                          title="Click to inspect"
+                        >
+                          {cell === null ? (
+                            <span className="text-muted-foreground italic">NULL</span>
+                          ) : (
+                            formatCellValue(cell)
+                          )}
+                        </TableCell>
+                      );
+                    })}
                   </TableRow>
                 );
               })}
