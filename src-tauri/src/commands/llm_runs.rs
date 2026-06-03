@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use copilot_sdk::{
-    generated::{
+    session_events::{
         AssistantMessageData, AssistantMessageDeltaData, AssistantUsageData, SessionErrorData,
         SessionModelChangeData, SessionStartData,
     },
@@ -435,8 +435,10 @@ async fn run_copilot_prompt(
         system_prompt.to_string()
     };
     let mut config = SessionConfig::default()
+        .with_streaming(true)
         .with_available_tools(Vec::<String>::new())
         .with_excluded_tools(["shell", "write", "edit", "read", "grep", "glob"])
+        .deny_all_permissions()
         .with_client_name("data-explorer-llm-runs")
         .with_system_message(
             SystemMessageConfig::new()
@@ -444,7 +446,6 @@ async fn run_copilot_prompt(
                 .with_content(system_content),
         );
     config.model = Some(model.to_string());
-    config.request_permission = Some(false);
     let session = client.create_session(config).await?;
     let mut events = session.subscribe();
     let prompt = if user_prompt.trim().is_empty() {
@@ -955,11 +956,11 @@ fn list_run_results(
 }
 
 fn total_tokens(
-    input_tokens: Option<f64>,
-    output_tokens: Option<f64>,
-    cache_read_tokens: Option<f64>,
-    cache_write_tokens: Option<f64>,
-) -> Option<f64> {
+    input_tokens: Option<i64>,
+    output_tokens: Option<i64>,
+    cache_read_tokens: Option<i64>,
+    cache_write_tokens: Option<i64>,
+) -> Option<i64> {
     let values = [
         input_tokens,
         output_tokens,
