@@ -5,8 +5,10 @@ import { cancelQuery, executeQuery, getStandaloneSql, releaseQueryResult, type Q
 import { isNumericColumnType } from "@/lib/utils";
 import { AiSqlAssistant } from "./AiSqlAssistant";
 import { ExportDialog } from "./ExportDialog";
+import { QueryResultsChart } from "./QueryResultsChart";
 import { ResizableResultsTable } from "./ResizableResultsTable";
 import { SqlEditor } from "./SqlEditor";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   ALL_QUERY_TAB_PROJECTS,
   UNASSIGNED_QUERY_TAB_PROJECT,
@@ -227,13 +229,24 @@ export function QueryEditor() {
         {/* Results */}
         {result && (
           <div className="flex-1 min-h-0 flex flex-col">
-            <div className="px-3 py-2 text-xs text-muted-foreground border-b">
-              {result.row_count} row{result.row_count !== 1 ? "s" : ""} •{" "}
-              {result.execution_time_ms}ms
-            </div>
-            <div className="flex-1 min-h-0">
-              <ResizableResultsTable result={result} />
-            </div>
+            <Tabs defaultValue="table" className="min-h-0 flex-1 gap-0">
+              <div className="flex items-center justify-between gap-3 border-b px-3 py-2">
+                <div className="text-xs text-muted-foreground">
+                  {result.row_count} row{result.row_count !== 1 ? "s" : ""} •{" "}
+                  {result.execution_time_ms}ms
+                </div>
+                <TabsList>
+                  <TabsTrigger value="table">Table</TabsTrigger>
+                  <TabsTrigger value="chart">Chart</TabsTrigger>
+                </TabsList>
+              </div>
+              <TabsContent value="table" className="min-h-0 flex-1">
+                <ResizableResultsTable result={result} />
+              </TabsContent>
+              <TabsContent value="chart" className="min-h-0 flex-1">
+                <QueryResultsChart result={result} />
+              </TabsContent>
+            </Tabs>
           </div>
         )}
 
