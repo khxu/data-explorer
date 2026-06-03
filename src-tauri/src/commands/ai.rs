@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use copilot_sdk::{
-    generated::{
+    session_events::{
         AssistantMessageData, AssistantMessageDeltaData, AssistantReasoningData,
         AssistantReasoningDeltaData, AssistantUsageData, SessionErrorData, SessionModelChangeData,
         SessionStartData,
@@ -67,12 +67,12 @@ pub struct AiDraftResponse {
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct AiTokenUsage {
-    pub input_tokens: Option<f64>,
-    pub output_tokens: Option<f64>,
-    pub cache_read_tokens: Option<f64>,
-    pub cache_write_tokens: Option<f64>,
-    pub total_tokens: Option<f64>,
-    pub duration_ms: Option<f64>,
+    pub input_tokens: Option<i64>,
+    pub output_tokens: Option<i64>,
+    pub cache_read_tokens: Option<i64>,
+    pub cache_write_tokens: Option<i64>,
+    pub total_tokens: Option<i64>,
+    pub duration_ms: Option<i64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -93,10 +93,10 @@ pub struct AiDraftProgress {
     pub kind: String,
     pub message: Option<String>,
     pub delta: Option<String>,
-    pub input_tokens: Option<f64>,
-    pub output_tokens: Option<f64>,
-    pub cache_read_tokens: Option<f64>,
-    pub cache_write_tokens: Option<f64>,
+    pub input_tokens: Option<i64>,
+    pub output_tokens: Option<i64>,
+    pub cache_read_tokens: Option<i64>,
+    pub cache_write_tokens: Option<i64>,
 }
 
 #[tauri::command]
@@ -178,8 +178,10 @@ pub async fn draft_sql_query(
     let requested_model = model.filter(|value| !value.trim().is_empty());
     let result = async {
         let mut config = SessionConfig::default()
+            .with_streaming(true)
             .with_available_tools(Vec::<String>::new())
             .with_excluded_tools(["shell", "write", "edit", "read", "grep", "glob"])
+            .deny_all_permissions()
             .with_client_name("data-explorer-sql-assistant")
             .with_system_message(
                 SystemMessageConfig::new()
@@ -187,7 +189,6 @@ pub async fn draft_sql_query(
                     .with_content("You are a SQL assistant for a DuckDB data exploration app. Draft a single read-only DuckDB SQL query. Use only the table names and columns provided by the app context. Return SQL only, with no markdown fences, explanations, or commentary."),
             );
         config.model = requested_model.clone();
-        config.request_permission = Some(false);
         let session = client.create_session(config).await?;
         let model_label = requested_model
             .as_deref()
@@ -499,11 +500,11 @@ async fn collect_sql_draft_with_progress(
 }
 
 fn total_tokens(
-    input_tokens: Option<f64>,
-    output_tokens: Option<f64>,
-    cache_read_tokens: Option<f64>,
-    cache_write_tokens: Option<f64>,
-) -> Option<f64> {
+    input_tokens: Option<i64>,
+    output_tokens: Option<i64>,
+    cache_read_tokens: Option<i64>,
+    cache_write_tokens: Option<i64>,
+) -> Option<i64> {
     let values = [
         input_tokens,
         output_tokens,
@@ -523,10 +524,10 @@ fn emit_progress(
     kind: &str,
     message: Option<&str>,
     delta: Option<&str>,
-    input_tokens: Option<f64>,
-    output_tokens: Option<f64>,
-    cache_read_tokens: Option<f64>,
-    cache_write_tokens: Option<f64>,
+    input_tokens: Option<i64>,
+    output_tokens: Option<i64>,
+    cache_read_tokens: Option<i64>,
+    cache_write_tokens: Option<i64>,
 ) {
     let _ = app.emit(
         "ai-sql-assistant-progress",
