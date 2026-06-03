@@ -51,6 +51,7 @@ impl Drop for ActiveQueryGuard<'_> {
 impl DuckDbEngine {
     pub fn new() -> Result<Self, AppError> {
         let conn = Connection::open_in_memory()?;
+        conn.execute_batch("LOAD icu")?;
         Ok(Self {
             conn: Mutex::new(conn),
             sources: Mutex::new(HashMap::new()),
@@ -715,6 +716,48 @@ mod tests {
         assert_eq!(columns.len(), 2);
         assert_eq!(columns[0].0, "id");
         assert_eq!(columns[1].0, "name");
+    }
+
+    #[test]
+    fn strftime_date_trunc_on_registered_timestamptz_source() {
+        let engine = DuckDbEngine::new().unwrap();
+        let source = std::env::temp_dir().join(format!(
+            "data_explorer_timestamptz_{}.parquet",
+            uuid::Uuid::new_v4().simple()
+        ));
+        let source_sql = source.to_string_lossy().replace('\'', "''");
+
+        {
+            let conn = engine.conn.lock().unwrap();
+            conn.execute_batch(&format!(
+                "COPY (
+                    SELECT '2024-01-15T12:00:00Z'::TIMESTAMPTZ AS created_at
+                    UNION ALL
+                    SELECT '2024-02-15T12:00:00Z'::TIMESTAMPTZ AS created_at
+                ) TO '{}' (FORMAT PARQUET)",
+                source_sql
+            ))
+            .unwrap();
+        }
+
+        engine
+            .register_source("openssf_agent_prs", source.to_str().unwrap(), "parquet")
+            .unwrap();
+
+        let result = engine
+            .query_rows(
+                "SELECT
+                    strftime(date_trunc('month', created_at), '%Y-%m') AS month_created,
+                    COUNT(*) AS row_count
+                FROM openssf_agent_prs
+                GROUP BY 1
+                ORDER BY 1 ASC",
+                None,
+            )
+            .unwrap();
+
+        std::fs::remove_file(source).unwrap();
+        assert_eq!(result.rows.len(), 2);
     }
 
     #[test]
