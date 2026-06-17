@@ -30,6 +30,12 @@ import {
   completionKeymap,
   type Completion,
 } from "@codemirror/autocomplete";
+import {
+  openSearchPanel,
+  replaceAll,
+  search,
+  searchKeymap,
+} from "@codemirror/search";
 
 interface SqlEditorProps {
   value: string;
@@ -94,15 +100,34 @@ export function SqlEditor({
       },
     ]);
 
+    const findReplaceKeymap = keymap.of([
+      ...searchKeymap,
+      {
+        key: "Mod-h",
+        mac: "Mod-Alt-f",
+        run: openSearchPanel,
+        scope: "editor search-panel",
+        preventDefault: true,
+      },
+      {
+        key: "Mod-Alt-Enter",
+        run: replaceAll,
+        scope: "editor search-panel",
+        preventDefault: true,
+      },
+    ]);
+
     const updateListener = EditorView.updateListener.of((update) => {
       if (update.docChanged) {
         onChangeRef.current(update.state.doc.toString());
       }
+      disableSearchInputTextTransforms(update.view);
     });
 
     const extensions = [
       runKeymap,
       history(),
+      search({ top: true }),
       keymap.of([
         ...defaultKeymap,
         ...historyKeymap,
@@ -110,6 +135,7 @@ export function SqlEditor({
         ...closeBracketsKeymap,
         indentWithTab,
       ]),
+      findReplaceKeymap,
       sqlCompartmentRef.current.of(sqlSupportRef.current),
       autocompletion({ activateOnTyping: true }),
       syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
@@ -149,6 +175,72 @@ export function SqlEditor({
         ".cm-line": {
           padding: "0 12px",
         },
+        ".cm-panels": {
+          backgroundColor: "hsl(var(--background))",
+          color: "hsl(var(--foreground))",
+          borderColor: "hsl(var(--border))",
+          fontSize: "13px",
+        },
+        ".cm-panels-top": {
+          borderBottom: "1px solid hsl(var(--border))",
+        },
+        ".cm-search": {
+          display: "flex",
+          flexWrap: "wrap",
+          alignItems: "center",
+          gap: "6px",
+          padding: "6px",
+        },
+        ".cm-search input.cm-textfield": {
+          minWidth: "14rem",
+          border: "1px solid hsl(var(--input))",
+          borderRadius: "calc(var(--radius) - 2px)",
+          backgroundColor: "transparent",
+          color: "hsl(var(--foreground))",
+          fontSize: "13px",
+          lineHeight: "1.4",
+          padding: "5px 10px",
+        },
+        ".cm-search input.cm-textfield:focus": {
+          outline: "2px solid hsl(var(--ring))",
+          outlineOffset: "-1px",
+        },
+        ".cm-panel.cm-search label": {
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "4px",
+          color: "hsl(var(--muted-foreground))",
+          fontSize: "13px",
+          lineHeight: "1.4",
+          whiteSpace: "pre",
+        },
+        ".cm-panel.cm-search input[type=checkbox]": {
+          width: "14px",
+          height: "14px",
+        },
+        ".cm-search button": {
+          border: "1px solid hsl(var(--border))",
+          borderRadius: "calc(var(--radius) - 2px)",
+          backgroundColor: "hsl(var(--secondary))",
+          color: "hsl(var(--secondary-foreground))",
+          fontSize: "13px",
+          lineHeight: "1.4",
+          padding: "5px 10px",
+        },
+        ".cm-search button:hover": {
+          backgroundColor: "hsl(var(--accent))",
+          color: "hsl(var(--accent-foreground))",
+        },
+        ".cm-panel.cm-search button[name=close]": {
+          top: "6px",
+          right: "8px",
+          width: "24px",
+          height: "24px",
+          padding: "0",
+          fontSize: "20px",
+          fontWeight: "500",
+          lineHeight: "1",
+        },
       }),
     ];
 
@@ -165,6 +257,7 @@ export function SqlEditor({
       state,
       parent: containerRef.current,
     });
+    disableSearchInputTextTransforms(view);
 
     viewRef.current = view;
   }, []); // intentionally empty — uses refs for callbacks
@@ -256,4 +349,13 @@ function buildCompletionSchema(dataSourceSchemas: DataSourceSchema[]): SQLNamesp
     }));
   }
   return schema;
+}
+
+function disableSearchInputTextTransforms(view: EditorView) {
+  const inputs = view.dom.querySelectorAll<HTMLInputElement>(".cm-search input.cm-textfield");
+  for (const input of inputs) {
+    input.setAttribute("autocapitalize", "none");
+    input.setAttribute("autocorrect", "off");
+    input.setAttribute("spellcheck", "false");
+  }
 }
