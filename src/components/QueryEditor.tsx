@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppState } from "@/hooks/useAppState";
 import { cancelQuery, executeQuery, getStandaloneSql, releaseQueryResult, type QueryResult } from "@/lib/api";
-import { isNumericColumnType } from "@/lib/utils";
+import { formatQueryCellValue, hasDuckDbTimestampValues, isNumericColumnType } from "@/lib/utils";
 import { AiSqlAssistant } from "./AiSqlAssistant";
 import { ExportDialog } from "./ExportDialog";
 import { QueryResultsChart } from "./QueryResultsChart";
@@ -33,6 +33,7 @@ export function QueryEditor() {
   const [showAssistant, setShowAssistant] = useState(false);
   const [copied, setCopied] = useState(false);
   const [copiedMarkdown, setCopiedMarkdown] = useState(false);
+  const [renderTimestampsAsIso, setRenderTimestampsAsIso] = useState(false);
 
   useEffect(() => {
     if (!running) return;
@@ -73,6 +74,7 @@ export function QueryEditor() {
   const result = tab.result;
   const queryError = tab.error;
   const elapsedLabel = formatElapsed(elapsedMs);
+  const hasTimestampValues = result ? hasDuckDbTimestampValues(result) : false;
 
   async function handleRun() {
     if (!sql.trim()) return;
@@ -129,7 +131,7 @@ export function QueryEditor() {
     if (!result) return;
 
     try {
-      await navigator.clipboard.writeText(formatMarkdownTable(result));
+      await navigator.clipboard.writeText(formatMarkdownTable(result, renderTimestampsAsIso));
       setCopiedMarkdown(true);
       setTimeout(() => setCopiedMarkdown(false), 2000);
     } catch (e) {
@@ -235,13 +237,29 @@ export function QueryEditor() {
                   {result.row_count} row{result.row_count !== 1 ? "s" : ""} •{" "}
                   {result.execution_time_ms}ms
                 </div>
-                <TabsList>
-                  <TabsTrigger value="table">Table</TabsTrigger>
-                  <TabsTrigger value="chart">Chart</TabsTrigger>
-                </TabsList>
+                <div className="flex items-center gap-2">
+                  {hasTimestampValues && (
+                    <Button
+                      type="button"
+                      variant={renderTimestampsAsIso ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setRenderTimestampsAsIso((value) => !value)}
+                      title="Render DuckDB timestamp values as ISO 8601 strings"
+                    >
+                      ISO timestamps
+                    </Button>
+                  )}
+                  <TabsList>
+                    <TabsTrigger value="table">Table</TabsTrigger>
+                    <TabsTrigger value="chart">Chart</TabsTrigger>
+                  </TabsList>
+                </div>
               </div>
               <TabsContent value="table" className="min-h-0 flex-1">
-                <ResizableResultsTable result={result} />
+                <ResizableResultsTable
+                  result={result}
+                  renderTimestampsAsIso={renderTimestampsAsIso}
+                />
               </TabsContent>
               <TabsContent value="chart" className="min-h-0 flex-1">
                 <QueryResultsChart result={result} />
@@ -292,13 +310,22 @@ function formatElapsed(ms: number) {
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
-function formatMarkdownTable(result: QueryResult) {
+function formatMarkdownTable(result: QueryResult, renderTimestampsAsIso: boolean) {
   const header = result.columns.map(formatMarkdownTableCell).join(" | ");
   const separator = result.columns
     .map((_, index) => (isNumericColumnType(result.column_types[index]) ? "---:" : "---"))
     .join(" | ");
   const rows = result.rows.map((row) =>
-    result.columns.map((_, index) => formatMarkdownTableCell(row[index])).join(" | ")
+    result.columns
+      .map((_, index) =>
+        formatMarkdownTableCell(
+          formatQueryCellValue(row[index], result.column_types[index], {
+            renderTimestampsAsIso,
+            formatValue: formatMarkdownRawCellValue,
+          })
+        )
+      )
+      .join(" | ")
   );
 
   return [`| ${header} |`, `| ${separator} |`, ...rows.map((row) => `| ${row} |`)].join("\n");
@@ -307,6 +334,9 @@ function formatMarkdownTable(result: QueryResult) {
 function formatMarkdownTableCell(value: unknown) {
   if (value === null || value === undefined) return "";
 
-  const text = typeof value === "string" ? value : JSON.stringify(value) ?? String(value);
-  return text.replace(/\r?\n/g, "<br>").replace(/\|/g, "\\|");
+  return formatMarkdownRawCellValue(value).replace(/\r?\n/g, "<br>").replace(/\|/g, "\\|");
+}
+
+function formatMarkdownRawCellValue(value: unknown) {
+  return typeof value === "string" ? value : JSON.stringify(value) ?? String(value);
 }
