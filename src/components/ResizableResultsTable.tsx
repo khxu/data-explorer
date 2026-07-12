@@ -21,10 +21,11 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import type { QueryResult } from "@/lib/api";
-import { cn, isNumericColumnType } from "@/lib/utils";
+import { cn, formatQueryCellValue, isNumericColumnType } from "@/lib/utils";
 
 interface Props {
   result: QueryResult;
+  renderTimestampsAsIso?: boolean;
 }
 
 const DEFAULT_COL_WIDTH = 150;
@@ -33,7 +34,7 @@ const HEADER_HEIGHT = 40;
 const ROW_HEIGHT = 29;
 const ROW_OVERSCAN = 8;
 
-export function ResizableResultsTable({ result }: Props) {
+export function ResizableResultsTable({ result, renderTimestampsAsIso = false }: Props) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(0);
@@ -134,9 +135,10 @@ export function ResizableResultsTable({ result }: Props) {
     [result.columns, result.column_types]
   );
 
-  function formatCellValue(cell: unknown): string {
-    if (cell === null || cell === undefined) return "";
-    return String(cell);
+  function formatCellValue(cell: unknown, columnIndex: number): string {
+    return formatQueryCellValue(cell, result.column_types?.[columnIndex], {
+      renderTimestampsAsIso,
+    });
   }
 
   async function handleCopyCellValue() {
@@ -227,7 +229,7 @@ export function ResizableResultsTable({ result }: Props) {
                           onClick={() =>
                             setInspectedCell({
                               column: result.columns[ci],
-                              value: cell === null ? "NULL" : formatCellValue(cell),
+                              value: cell === null ? "NULL" : formatCellValue(cell, ci),
                             })
                           }
                           title="Click to inspect"
@@ -235,7 +237,7 @@ export function ResizableResultsTable({ result }: Props) {
                           {cell === null ? (
                             <span className="text-muted-foreground italic">NULL</span>
                           ) : (
-                            formatCellValue(cell)
+                            formatCellValue(cell, ci)
                           )}
                         </TableCell>
                       );
