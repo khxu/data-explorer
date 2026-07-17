@@ -11,6 +11,7 @@ use db::Database;
 use duckdb_engine::DuckDbEngine;
 
 use commands::ai::*;
+use commands::data_sources::deserialize_file_paths;
 use commands::data_sources::*;
 use commands::export::*;
 use commands::llm_runs::*;
@@ -44,17 +45,21 @@ pub fn run() {
             {
                 let conn = database.conn.lock().unwrap();
                 let mut stmt = conn
-                    .prepare("SELECT name, file_path, file_format FROM data_sources")
+                    .prepare("SELECT name, file_path, file_paths, file_format FROM data_sources")
                     .unwrap();
-                let sources: Vec<(String, String, String)> = stmt
-                    .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+                let sources: Vec<(String, String, Option<String>, String)> = stmt
+                    .query_map([], |row| {
+                        Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+                    })
                     .unwrap()
                     .filter_map(|r| r.ok())
                     .collect();
                 drop(stmt);
                 drop(conn);
-                for (name, path, format) in &sources {
-                    let _ = duckdb.register_source(name, path, format);
+                for (name, path, paths, format) in sources {
+                    if let Ok(file_paths) = deserialize_file_paths(path, paths) {
+                        let _ = duckdb.register_source(&name, &file_paths, &format);
+                    }
                 }
             }
 

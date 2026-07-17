@@ -6,6 +6,7 @@ export interface DataSource {
   id: string;
   name: string;
   file_path: string;
+  file_paths: string[];
   file_format: string;
   created_at: string;
   updated_at: string;
@@ -25,9 +26,9 @@ export interface DataSourceSchema {
 
 export async function registerDataSource(
   name: string,
-  filePath: string
+  filePaths: string[]
 ): Promise<DataSource> {
-  return invoke("register_data_source", { name, filePath });
+  return invoke("register_data_source", { name, filePaths });
 }
 
 export async function removeDataSource(id: string): Promise<void> {

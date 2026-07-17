@@ -3,6 +3,7 @@ use std::sync::Arc;
 use std::time::Instant;
 use tauri::State;
 
+use crate::commands::data_sources::deserialize_file_paths;
 use crate::db::Database;
 use crate::duckdb_engine::DuckDbEngine;
 use crate::error::AppError;
@@ -211,14 +212,18 @@ pub fn get_standalone_sql(
 ) -> Result<String, AppError> {
     // Ensure the in-memory source registry is fully up-to-date from SQLite
     let conn = db.conn.lock().unwrap();
-    let mut stmt = conn.prepare("SELECT name, file_path, file_format FROM data_sources")?;
-    let sources: Vec<(String, String, String)> = stmt
-        .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
+    let mut stmt =
+        conn.prepare("SELECT name, file_path, file_paths, file_format FROM data_sources")?;
+    let sources: Vec<(String, String, Option<String>, String)> = stmt
+        .query_map([], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+        })?
         .collect::<Result<Vec<_>, _>>()?;
     drop(stmt);
     drop(conn);
-    for (name, path, format) in &sources {
-        duckdb.register_source(name, path, format)?;
+    for (name, path, paths, format) in sources {
+        let file_paths = deserialize_file_paths(path, paths)?;
+        duckdb.register_source(&name, &file_paths, &format)?;
     }
     duckdb.inline_sources(&sql)
 }

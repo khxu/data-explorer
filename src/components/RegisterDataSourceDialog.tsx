@@ -21,7 +21,7 @@ interface Props {
 
 export function RegisterDataSourceDialog({ open: isOpen, onClose }: Props) {
   const { tags, refreshDataSources } = useAppState();
-  const [filePath, setFilePath] = useState("");
+  const [filePaths, setFilePaths] = useState<string[]>([]);
   const [name, setName] = useState("");
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -29,7 +29,7 @@ export function RegisterDataSourceDialog({ open: isOpen, onClose }: Props) {
 
   async function pickFile() {
     const result = await open({
-      multiple: false,
+      multiple: true,
       filters: [
         {
           name: "Data Files",
@@ -38,9 +38,10 @@ export function RegisterDataSourceDialog({ open: isOpen, onClose }: Props) {
       ],
     });
     if (result) {
-      setFilePath(result);
+      const paths = Array.isArray(result) ? result : [result];
+      setFilePaths(paths);
       if (!name) {
-        const parts = result.split(/[/\\]/);
+        const parts = paths[0].split(/[/\\]/);
         const fileName = parts[parts.length - 1];
         const baseName = fileName.replace(/\.[^.]+$/, "");
         setName(baseName);
@@ -55,16 +56,16 @@ export function RegisterDataSourceDialog({ open: isOpen, onClose }: Props) {
   }
 
   async function handleSubmit() {
-    if (!filePath || !name) return;
+    if (filePaths.length === 0 || !name) return;
     setLoading(true);
     setError(null);
     try {
-      const ds = await registerDataSource(name, filePath);
+      const ds = await registerDataSource(name, filePaths);
       if (selectedTagIds.length > 0) {
         await assignTags(ds.id, selectedTagIds);
       }
       await refreshDataSources();
-      setFilePath("");
+      setFilePaths([]);
       setName("");
       setSelectedTagIds([]);
       onClose();
@@ -86,8 +87,12 @@ export function RegisterDataSourceDialog({ open: isOpen, onClose }: Props) {
             <Label>File</Label>
             <div className="flex gap-2">
               <Input
-                value={filePath}
-                placeholder="Select a data file..."
+                value={
+                  filePaths.length > 1
+                    ? `${filePaths.length} files selected`
+                    : filePaths[0] ?? ""
+                }
+                placeholder="Select one or more data files..."
                 readOnly
                 className="flex-1"
               />
@@ -127,7 +132,7 @@ export function RegisterDataSourceDialog({ open: isOpen, onClose }: Props) {
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={!filePath || !name || loading}>
+          <Button onClick={handleSubmit} disabled={filePaths.length === 0 || !name || loading}>
             {loading ? "Registering..." : "Register"}
           </Button>
         </DialogFooter>

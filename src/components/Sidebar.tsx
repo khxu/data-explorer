@@ -214,7 +214,7 @@ export function Sidebar() {
                 <button
                   className="flex-1 min-w-0 text-left text-sm px-2 py-1 rounded hover:bg-accent/50 truncate"
                   onClick={() => handleSourceClick(ds.name)}
-                  title={ds.file_path}
+                  title={ds.file_paths.join("\n")}
                 >
                   <span className="mr-1">
                     {FORMAT_ICONS[ds.file_format] ?? "📁"}
