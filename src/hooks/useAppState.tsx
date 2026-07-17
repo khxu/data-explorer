@@ -25,6 +25,7 @@ export interface QueryTab {
   sql: string;
   projectId: string | null;
   result: QueryResult | null;
+  resultRestored: boolean;
   error: string | null;
 }
 
@@ -33,6 +34,7 @@ export type QueryTabDropPosition = "before" | "after";
 export const ALL_QUERY_TAB_PROJECTS = "__all__";
 export const UNASSIGNED_QUERY_TAB_PROJECT = "__unassigned__";
 const QUERY_TAB_PROJECT_FILTER_STORAGE_KEY = "data-explorer.queryTabProjectFilter";
+const MAX_CACHED_QUERY_RESULT_ROWS = 10;
 
 function isBuiltInQueryTabProjectFilter(filter: string) {
   return filter === ALL_QUERY_TAB_PROJECTS || filter === UNASSIGNED_QUERY_TAB_PROJECT;
@@ -47,6 +49,16 @@ function loadPersistedQueryTabProjectFilter() {
     console.warn("Unable to load persisted query tab project filter", error);
     return ALL_QUERY_TAB_PROJECTS;
   }
+}
+
+function createQueryResultCache(result: QueryResult | null) {
+  if (!result) return null;
+
+  return {
+    ...result,
+    rows: result.rows.slice(0, MAX_CACHED_QUERY_RESULT_ROWS),
+    export_table_name: null,
+  };
 }
 
 export function queryTabMatchesProjectFilter(tab: QueryTab, filter: string) {
@@ -64,6 +76,7 @@ function makeTab(name?: string, sql?: string, projectId: string | null = null): 
     sql: sql ?? "",
     projectId,
     result: null,
+    resultRestored: false,
     error: null,
   };
 }
@@ -134,7 +147,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           name: s.name,
           sql: s.sql_text,
           projectId: s.project_id,
-          result: null,
+          result: s.result_cache,
+          resultRestored: s.result_cache !== null,
           error: null,
         }));
         // Restore the nextTabId counter past any saved IDs
@@ -167,6 +181,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         project_id: t.projectId,
         sort_order: i,
         is_active: t.id === activeQueryTabId,
+        result_cache: createQueryResultCache(t.result),
       }));
       saveQueryTabs(toSave).catch(() => {});
     }, 500);
@@ -276,7 +291,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const updateQueryTab = useCallback(
     (id: string, updates: Partial<Pick<QueryTab, "sql" | "result" | "error">>) => {
-      setQueryTabs((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)));
+      setQueryTabs((prev) =>
+        prev.map((t) =>
+          t.id === id
+            ? {
+                ...t,
+                ...updates,
+                ...("result" in updates ? { resultRestored: false } : {}),
+              }
+            : t
+        )
+      );
     },
     []
   );

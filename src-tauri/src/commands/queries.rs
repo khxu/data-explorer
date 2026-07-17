@@ -278,6 +278,25 @@ pub struct SavedQueryTab {
     pub project_id: Option<String>,
     pub sort_order: i64,
     pub is_active: bool,
+    pub result_cache: Option<QueryResult>,
+}
+
+const MAX_CACHED_QUERY_RESULT_ROWS: usize = 10;
+
+fn cache_query_result(result: &QueryResult) -> QueryResult {
+    QueryResult {
+        columns: result.columns.clone(),
+        column_types: result.column_types.clone(),
+        rows: result
+            .rows
+            .iter()
+            .take(MAX_CACHED_QUERY_RESULT_ROWS)
+            .cloned()
+            .collect(),
+        row_count: result.row_count,
+        execution_time_ms: result.execution_time_ms,
+        export_table_name: None,
+    }
 }
 
 #[tauri::command]
@@ -286,19 +305,34 @@ pub fn load_query_tabs(
 ) -> Result<Vec<SavedQueryTab>, AppError> {
     let conn = db.conn.lock().unwrap();
     let mut stmt = conn.prepare(
-        "SELECT id, name, sql_text, project_id, sort_order, is_active FROM query_tabs ORDER BY sort_order",
+        "SELECT id, name, sql_text, project_id, sort_order, is_active, result_cache FROM query_tabs ORDER BY sort_order",
     )?;
     let rows = stmt.query_map([], |row| {
-        Ok(SavedQueryTab {
-            id: row.get(0)?,
-            name: row.get(1)?,
-            sql_text: row.get(2)?,
-            project_id: row.get(3)?,
-            sort_order: row.get(4)?,
-            is_active: row.get::<_, i64>(5)? != 0,
-        })
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, String>(2)?,
+            row.get::<_, Option<String>>(3)?,
+            row.get::<_, i64>(4)?,
+            row.get::<_, i64>(5)? != 0,
+            row.get::<_, Option<String>>(6)?,
+        ))
     })?;
-    Ok(rows.collect::<Result<Vec<_>, _>>()?)
+    rows.map(|row| {
+        let (id, name, sql_text, project_id, sort_order, is_active, result_cache) = row?;
+        Ok(SavedQueryTab {
+            id,
+            name,
+            sql_text,
+            project_id,
+            sort_order,
+            is_active,
+            result_cache: result_cache
+                .map(|json| serde_json::from_str(&json))
+                .transpose()?,
+        })
+    })
+    .collect()
 }
 
 #[tauri::command]
@@ -309,9 +343,15 @@ pub fn save_query_tabs(
     let conn = db.conn.lock().unwrap();
     conn.execute("DELETE FROM query_tabs", [])?;
     let mut stmt = conn.prepare(
-        "INSERT INTO query_tabs (id, name, sql_text, project_id, sort_order, is_active) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        "INSERT INTO query_tabs (id, name, sql_text, project_id, sort_order, is_active, result_cache) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
     )?;
     for tab in &tabs {
+        let result_cache = tab
+            .result_cache
+            .as_ref()
+            .map(cache_query_result)
+            .map(|result| serde_json::to_string(&result))
+            .transpose()?;
         stmt.execute(rusqlite::params![
             tab.id,
             tab.name,
@@ -319,7 +359,35 @@ pub fn save_query_tabs(
             tab.project_id,
             tab.sort_order,
             tab.is_active as i64,
+            result_cache,
         ])?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod query_tab_tests {
+    use super::*;
+
+    #[test]
+    fn cached_query_results_are_capped_and_drop_export_table() {
+        let result = QueryResult {
+            columns: vec!["value".to_string()],
+            column_types: vec!["INTEGER".to_string()],
+            rows: (0..12)
+                .map(|value| vec![serde_json::json!(value)])
+                .collect(),
+            row_count: 12,
+            execution_time_ms: 42,
+            export_table_name: Some("__qr_test".to_string()),
+        };
+
+        let cached = cache_query_result(&result);
+
+        assert_eq!(cached.rows.len(), MAX_CACHED_QUERY_RESULT_ROWS);
+        assert_eq!(cached.row_count, 12);
+        assert_eq!(cached.rows[0], vec![serde_json::json!(0)]);
+        assert_eq!(cached.rows[9], vec![serde_json::json!(9)]);
+        assert_eq!(cached.export_table_name, None);
+    }
 }
