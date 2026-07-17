@@ -90,9 +90,9 @@ function AppContent() {
             </TabsTrigger>
             <TabsTrigger value="llm-runs">LLM Runs</TabsTrigger>
           </TabsList>
-          <TabsContent value="query" className="flex-1 min-h-0 mt-0 flex flex-col">
+          <TabsContent value="query" className="flex-1 min-h-0 mt-0 flex">
             <QueryTabBar />
-            <div className="flex-1 min-h-0">
+            <div className="flex-1 min-h-0 min-w-0">
               <QueryEditor />
             </div>
           </TabsContent>

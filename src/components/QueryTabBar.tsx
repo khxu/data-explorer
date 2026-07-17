@@ -103,9 +103,13 @@ export function QueryTabBar() {
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.metaKey && e.altKey && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+      if (
+        e.metaKey &&
+        e.altKey &&
+        ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.key)
+      ) {
         e.preventDefault();
-        switchTab(e.key === "ArrowLeft" ? -1 : 1);
+        switchTab(e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 1);
       }
     }
     window.addEventListener("keydown", handleKeyDown);
@@ -118,6 +122,11 @@ export function QueryTabBar() {
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
   const pointerDragRef = useRef<PointerDragState | null>(null);
   const suppressClickRef = useRef(false);
+  const activeTabRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    activeTabRef.current?.scrollIntoView({ block: "nearest" });
+  }, [activeQueryTabId]);
 
   function startRename(id: string, currentName: string) {
     setEditingId(id);
@@ -144,7 +153,7 @@ export function QueryTabBar() {
     const rect = tabElement.getBoundingClientRect();
     return {
       id: tabElement.dataset.queryTabId,
-      position: clientX < rect.left + rect.width / 2 ? "before" : "after",
+      position: clientY < rect.top + rect.height / 2 ? "before" : "after",
     };
   }
 
@@ -200,11 +209,22 @@ export function QueryTabBar() {
   }
 
   return (
-    <div className="border-b bg-muted/20">
-      <div className="flex items-center gap-2 px-3 py-1.5">
-        <span className="text-xs font-medium text-muted-foreground">Query tabs</span>
+    <div className="flex h-full w-60 shrink-0 flex-col border-r bg-muted/20">
+      <div className="space-y-2 border-b p-2">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs font-medium text-muted-foreground">Query tabs</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 w-6 shrink-0 p-0 text-muted-foreground"
+            onClick={handleAddTab}
+            title="New query tab"
+          >
+            +
+          </Button>
+        </div>
         <Select value={queryTabProjectFilter} onValueChange={setQueryTabProjectFilter}>
-          <SelectTrigger size="sm" className="h-7 min-w-32">
+          <SelectTrigger size="sm" className="h-7 w-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -218,14 +238,14 @@ export function QueryTabBar() {
           </SelectContent>
         </Select>
         {unassignedTabCount > 0 && projects.length > 0 && (
-          <>
-            <span className="text-xs text-muted-foreground">
+          <div className="space-y-1">
+            <span className="block text-xs text-muted-foreground">
               {unassignedTabCount} unassigned
             </span>
             <Select onValueChange={moveUnassignedQueryTabsToProject}>
               <SelectTrigger
                 size="sm"
-                className="h-7 min-w-40"
+                className="h-7 w-full"
                 title="Move all unassigned query tabs into a project"
               >
                 <SelectValue placeholder="Move unassigned to..." />
@@ -238,10 +258,10 @@ export function QueryTabBar() {
                 ))}
               </SelectContent>
             </Select>
-          </>
+          </div>
         )}
       </div>
-      <div className="query-tabs-scrollbar flex min-w-0 items-center gap-0.5 overflow-x-auto overflow-y-hidden px-3 pt-1">
+      <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-x-hidden overflow-y-auto p-2">
         {filteredTabs.map((tab) => {
           const isActive = tab.id === activeQueryTabId;
           const isEditing = editingId === tab.id;
@@ -253,19 +273,20 @@ export function QueryTabBar() {
             <ContextMenu key={tab.id}>
               <ContextMenuTrigger asChild>
                 <div
+                  ref={isActive ? activeTabRef : undefined}
                   data-query-tab-id={tab.id}
                   aria-grabbed={isDragging}
-                  className={`group flex shrink-0 items-center gap-1 whitespace-nowrap px-2 py-1 rounded-t text-sm cursor-pointer border border-b-0 transition-opacity ${
+                  className={`group flex w-full min-w-0 shrink-0 items-center gap-1 rounded-md border px-2 py-1.5 text-sm cursor-pointer transition-opacity ${
                     isActive
-                      ? "bg-background border-border"
+                      ? "bg-background border-border shadow-sm"
                       : "bg-muted/40 border-transparent hover:bg-muted/60"
                   } ${isDragging ? "opacity-50" : ""} ${
                     isDropTarget && dropTarget.position === "before"
-                      ? "border-l-2 border-l-primary"
+                      ? "border-t-2 border-t-primary"
                       : ""
                   } ${
                     isDropTarget && dropTarget.position === "after"
-                      ? "border-r-2 border-r-primary"
+                      ? "border-b-2 border-b-primary"
                       : ""
                   }`}
                   onClick={() => {
@@ -293,23 +314,23 @@ export function QueryTabBar() {
                         if (e.key === "Enter") commitRename();
                         if (e.key === "Escape") setEditingId(null);
                       }}
-                      className="h-5 w-24 text-xs px-1 py-0"
+                      className="h-5 min-w-0 flex-1 px-1 py-0 text-xs"
                       autoFocus
                       onClick={(e) => e.stopPropagation()}
                     />
                   ) : draggingTabId ? (
-                    <span className="select-none whitespace-nowrap">
+                    <span className="min-w-0 flex-1 truncate select-none">
                       {tab.name}
                     </span>
                   ) : (
                     <TooltipProvider delayDuration={500}>
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <span className="select-none whitespace-nowrap">
+                          <span className="min-w-0 flex-1 truncate select-none">
                             {tab.name}
                           </span>
                         </TooltipTrigger>
-                        <TooltipContent side="bottom">
+                        <TooltipContent side="right">
                           <p>
                             {project ? `${project.name} • ` : ""}
                             Drag to reorder • Double-click to rename • Right-click for actions
@@ -319,7 +340,10 @@ export function QueryTabBar() {
                     </TooltipProvider>
                   )}
                   {queryTabProjectFilter === ALL_QUERY_TAB_PROJECTS && project && (
-                    <Badge variant="outline" className="h-4 px-1 text-[10px]">
+                    <Badge
+                      variant="outline"
+                      className="h-4 max-w-20 shrink-0 truncate px-1 text-[10px]"
+                    >
                       {project.name}
                     </Badge>
                   )}
@@ -385,19 +409,10 @@ export function QueryTabBar() {
           );
         })}
         {filteredTabs.length === 0 && (
-          <span className="text-xs text-muted-foreground px-2 py-1">
+          <span className="px-2 py-1 text-xs text-muted-foreground">
             No query tabs in this project
           </span>
         )}
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-6 w-6 shrink-0 p-0 text-muted-foreground"
-          onClick={handleAddTab}
-          title="New query tab"
-        >
-          +
-        </Button>
       </div>
     </div>
   );
