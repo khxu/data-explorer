@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { useAppState } from "@/hooks/useAppState";
 import { cancelQuery, executeQuery, getStandaloneSql, releaseQueryResult, type QueryResult } from "@/lib/api";
 import { formatQueryCellValue, hasDuckDbTimestampValues, isNumericColumnType } from "@/lib/utils";
@@ -73,6 +74,7 @@ export function QueryEditor() {
   const sql = tab.sql;
   const result = tab.result;
   const queryError = tab.error;
+  const resultRestored = tab.resultRestored;
   const elapsedLabel = formatElapsed(elapsedMs);
   const hasTimestampValues = result ? hasDuckDbTimestampValues(result) : false;
 
@@ -233,9 +235,19 @@ export function QueryEditor() {
           <div className="flex-1 min-h-0 flex flex-col">
             <Tabs defaultValue="table" className="min-h-0 flex-1 gap-0">
               <div className="flex items-center justify-between gap-3 border-b px-3 py-2">
-                <div className="text-xs text-muted-foreground">
-                  {result.row_count} row{result.row_count !== 1 ? "s" : ""} •{" "}
-                  {result.execution_time_ms}ms
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <span>
+                    {result.row_count} row{result.row_count !== 1 ? "s" : ""} •{" "}
+                    {result.execution_time_ms}ms
+                  </span>
+                  {resultRestored && (
+                    <Badge variant="secondary">
+                      Restored from cache
+                      {result.row_count > result.rows.length
+                        ? ` • showing first ${result.rows.length} rows`
+                        : ""}
+                    </Badge>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   {hasTimestampValues && (

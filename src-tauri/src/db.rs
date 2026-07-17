@@ -158,6 +158,17 @@ impl Database {
             )?;
         }
 
+        let has_query_tab_result_cache = conn
+            .prepare("PRAGMA table_info(query_tabs)")?
+            .query_map([], |row| row.get::<_, String>(1))?
+            .collect::<Result<Vec<_>, _>>()?
+            .iter()
+            .any(|column| column == "result_cache");
+
+        if !has_query_tab_result_cache {
+            conn.execute("ALTER TABLE query_tabs ADD COLUMN result_cache TEXT", [])?;
+        }
+
         Ok(())
     }
 }

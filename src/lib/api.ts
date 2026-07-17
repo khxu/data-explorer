@@ -274,6 +274,7 @@ export interface SavedQueryTab {
   project_id: string | null;
   sort_order: number;
   is_active: boolean;
+  result_cache: QueryResult | null;
 }
 
 export async function loadQueryTabs(): Promise<SavedQueryTab[]> {
