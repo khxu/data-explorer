@@ -6,13 +6,13 @@ use crate::error::AppError;
 
 #[derive(Clone)]
 struct SourceInfo {
-    file_path: String,
+    file_paths: Vec<String>,
     file_format: String,
 }
 
 pub struct DuckDbEngine {
     pub conn: Mutex<Connection>,
-    /// Registered data sources: name → (file_path, file_format).
+    /// Registered data sources: name → (file_paths, file_format).
     /// Used to build CTE-prefixed queries that bypass catalog resolution.
     sources: Mutex<HashMap<String, SourceInfo>>,
     active_query: Mutex<Option<Arc<InterruptHandle>>>,
@@ -79,14 +79,25 @@ impl DuckDbEngine {
         *self.active_query.lock().unwrap() = None;
     }
 
-    fn read_fn_for(file_path: &str, file_format: &str) -> Result<String, AppError> {
+    fn read_fn_for(file_paths: &[String], file_format: &str) -> Result<String, AppError> {
+        if file_paths.is_empty() {
+            return Err(AppError::General(
+                "A data source must contain at least one file.".to_string(),
+            ));
+        }
+        let paths = file_paths
+            .iter()
+            .map(|path| format!("'{}'", path.replace('\'', "''")))
+            .collect::<Vec<_>>();
+        let path_arg = if paths.len() == 1 {
+            paths[0].clone()
+        } else {
+            format!("[{}]", paths.join(", "))
+        };
         match file_format {
-            "parquet" => Ok(format!("read_parquet('{}')", file_path.replace('\'', "''"))),
-            "csv" => Ok(format!("read_csv('{}')", file_path.replace('\'', "''"))),
-            "json" | "jsonl" | "ndjson" => Ok(format!(
-                "read_json_auto('{}')",
-                file_path.replace('\'', "''")
-            )),
+            "parquet" => Ok(format!("read_parquet({})", path_arg)),
+            "csv" => Ok(format!("read_csv({})", path_arg)),
+            "json" | "jsonl" | "ndjson" => Ok(format!("read_json_auto({})", path_arg)),
             _ => Err(AppError::General(format!(
                 "Unsupported file format: {}",
                 file_format
@@ -98,16 +109,16 @@ impl DuckDbEngine {
     pub fn register_source(
         &self,
         name: &str,
-        file_path: &str,
+        file_paths: &[String],
         file_format: &str,
     ) -> Result<(), AppError> {
         // Validate the format early
-        Self::read_fn_for(file_path, file_format)?;
+        Self::read_fn_for(file_paths, file_format)?;
 
         self.sources.lock().unwrap().insert(
             name.to_string(),
             SourceInfo {
-                file_path: file_path.to_string(),
+                file_paths: file_paths.to_vec(),
                 file_format: file_format.to_string(),
             },
         );
@@ -122,30 +133,30 @@ impl DuckDbEngine {
 
     pub fn columns_for_source(
         &self,
-        file_path: &str,
+        file_paths: &[String],
         file_format: &str,
     ) -> Result<Vec<(String, String)>, AppError> {
-        Ok(self.preview_source(file_path, file_format, 0)?.columns)
+        Ok(self.preview_source(file_paths, file_format, 0)?.columns)
     }
 
     pub fn preview_source(
         &self,
-        file_path: &str,
+        file_paths: &[String],
         file_format: &str,
         limit: usize,
     ) -> Result<SourcePreview, AppError> {
-        let read_fn = Self::read_fn_for(file_path, file_format)?;
+        let read_fn = Self::read_fn_for(file_paths, file_format)?;
         let sql = format!("SELECT * FROM {} LIMIT {}", read_fn, limit);
         self.query_raw_rows(&sql)
     }
 
     pub fn source_rows(
         &self,
-        file_path: &str,
+        file_paths: &[String],
         file_format: &str,
         limit: Option<usize>,
     ) -> Result<SourcePreview, AppError> {
-        let read_fn = Self::read_fn_for(file_path, file_format)?;
+        let read_fn = Self::read_fn_for(file_paths, file_format)?;
         let sql = if let Some(limit) = limit {
             format!("SELECT * FROM {} LIMIT {}", read_fn, limit)
         } else {
@@ -191,10 +202,17 @@ impl DuckDbEngine {
         Ok(SourcePreview { columns, rows })
     }
 
-    pub fn query_rows(&self, user_sql: &str, limit: Option<usize>) -> Result<SourcePreview, AppError> {
+    pub fn query_rows(
+        &self,
+        user_sql: &str,
+        limit: Option<usize>,
+    ) -> Result<SourcePreview, AppError> {
         let wrapped_sql = self.wrap_query_for_embedding(user_sql)?;
         let sql = if let Some(limit) = limit {
-            format!("SELECT * FROM ({}) AS llm_input LIMIT {}", wrapped_sql, limit)
+            format!(
+                "SELECT * FROM ({}) AS llm_input LIMIT {}",
+                wrapped_sql, limit
+            )
         } else {
             wrapped_sql
         };
@@ -272,7 +290,7 @@ impl DuckDbEngine {
 
         let mut cte_parts: Vec<String> = Vec::new();
         for (name, info) in sources.iter() {
-            let read_fn = Self::read_fn_for(&info.file_path, &info.file_format)?;
+            let read_fn = Self::read_fn_for(&info.file_paths, &info.file_format)?;
             cte_parts.push(format!("{} AS (SELECT * FROM {})", name, read_fn));
         }
         let cte_block = cte_parts.join(", ");
@@ -434,7 +452,7 @@ impl DuckDbEngine {
                     if let Some((source_name, info)) =
                         source_lookup.get(&value.to_ascii_lowercase())
                     {
-                        let read_fn = Self::read_fn_for(&info.file_path, &info.file_format)?;
+                        let read_fn = Self::read_fn_for(&info.file_paths, &info.file_format)?;
                         let replacement = if Self::has_explicit_alias(&tokens, index) {
                             read_fn
                         } else {
@@ -709,13 +727,53 @@ mod tests {
         std::fs::write(&source, "id,name\n1,Ada\n").unwrap();
 
         let columns = engine
-            .columns_for_source(source.to_str().unwrap(), "csv")
+            .columns_for_source(&[source.to_string_lossy().into_owned()], "csv")
             .unwrap();
 
         std::fs::remove_file(source).unwrap();
         assert_eq!(columns.len(), 2);
         assert_eq!(columns[0].0, "id");
         assert_eq!(columns[1].0, "name");
+    }
+
+    #[test]
+    fn registered_source_reads_multiple_parquet_files_as_one_table() {
+        let engine = DuckDbEngine::new().unwrap();
+        let source_prefix = std::env::temp_dir().join(format!(
+            "data_explorer_multi_source_{}",
+            uuid::Uuid::new_v4().simple()
+        ));
+        let first = source_prefix.with_extension("1.parquet");
+        let second = source_prefix.with_extension("2.parquet");
+
+        {
+            let conn = engine.conn.lock().unwrap();
+            conn.execute_batch(&format!(
+                "COPY (SELECT 1 AS id) TO '{}' (FORMAT PARQUET);
+                 COPY (SELECT 2 AS id) TO '{}' (FORMAT PARQUET);",
+                first.to_string_lossy().replace('\'', "''"),
+                second.to_string_lossy().replace('\'', "''")
+            ))
+            .unwrap();
+        }
+
+        let paths = vec![
+            first.to_string_lossy().into_owned(),
+            second.to_string_lossy().into_owned(),
+        ];
+        engine
+            .register_source("partitioned_data", &paths, "parquet")
+            .unwrap();
+
+        let result = engine
+            .query_rows("SELECT id FROM partitioned_data ORDER BY id", None)
+            .unwrap();
+
+        std::fs::remove_file(first).unwrap();
+        std::fs::remove_file(second).unwrap();
+        assert_eq!(result.rows.len(), 2);
+        assert_eq!(result.rows[0][0], serde_json::json!(1));
+        assert_eq!(result.rows[1][0], serde_json::json!(2));
     }
 
     #[test]
@@ -741,7 +799,11 @@ mod tests {
         }
 
         engine
-            .register_source("openssf_agent_prs", source.to_str().unwrap(), "parquet")
+            .register_source(
+                "openssf_agent_prs",
+                &[source.to_string_lossy().into_owned()],
+                "parquet",
+            )
             .unwrap();
 
         let result = engine
@@ -764,10 +826,18 @@ mod tests {
     fn inline_sources_aliases_table_functions_in_relations_only() {
         let engine = DuckDbEngine::new().unwrap();
         engine
-            .register_source("github_policy_keywords", "/tmp/policy-keywords.csv", "csv")
+            .register_source(
+                "github_policy_keywords",
+                &["/tmp/policy-keywords.csv".to_string()],
+                "csv",
+            )
             .unwrap();
         engine
-            .register_source("searchablebill", "/tmp/searchablebill.parquet", "parquet")
+            .register_source(
+                "searchablebill",
+                &["/tmp/searchablebill.parquet".to_string()],
+                "parquet",
+            )
             .unwrap();
 
         let sql = "WITH policy_keywords AS (
@@ -793,7 +863,11 @@ JOIN policy_keywords ON LOWER(searchablebill.raw_text) LIKE policy_keywords.keyw
     fn inline_sources_preserves_explicit_aliases() {
         let engine = DuckDbEngine::new().unwrap();
         engine
-            .register_source("searchablebill", "/tmp/searchablebill.parquet", "parquet")
+            .register_source(
+                "searchablebill",
+                &["/tmp/searchablebill.parquet".to_string()],
+                "parquet",
+            )
             .unwrap();
 
         let standalone = engine

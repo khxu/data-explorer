@@ -12,6 +12,7 @@ use copilot_sdk::{
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, State};
 
+use crate::commands::data_sources::deserialize_file_paths;
 use crate::db::Database;
 use crate::duckdb_engine::DuckDbEngine;
 use crate::error::AppError;
@@ -299,9 +300,7 @@ fn save_ai_assist_history(
     model_name: Option<&str>,
     token_usage: Option<&AiTokenUsage>,
 ) -> Result<(), AppError> {
-    let token_usage = token_usage
-        .map(serde_json::to_string)
-        .transpose()?;
+    let token_usage = token_usage.map(serde_json::to_string).transpose()?;
     let conn = db.conn.lock().unwrap();
     conn.execute(
         "INSERT INTO ai_assist_history (id, prompt_text, generated_sql, requested_model, model_used, model_name, token_usage)
@@ -320,7 +319,9 @@ fn save_ai_assist_history(
 }
 
 async fn build_copilot_client() -> Result<Client, AppError> {
-    Client::start(ClientOptions::default()).await.map_err(AppError::from)
+    Client::start(ClientOptions::default())
+        .await
+        .map_err(AppError::from)
 }
 
 async fn stop_copilot_client<T>(
@@ -557,14 +558,15 @@ fn build_ai_context(
         let mut sources = Vec::new();
         for id in ids {
             let source = conn.query_row(
-                "SELECT id, name, file_path, file_format FROM data_sources WHERE id = ?1",
+                "SELECT id, name, file_path, file_paths, file_format FROM data_sources WHERE id = ?1",
                 rusqlite::params![id],
                 |row| {
                     Ok((
                         row.get::<_, String>(0)?,
                         row.get::<_, String>(1)?,
                         row.get::<_, String>(2)?,
-                        row.get::<_, String>(3)?,
+                        row.get::<_, Option<String>>(3)?,
+                        row.get::<_, String>(4)?,
                     ))
                 },
             )?;
@@ -572,14 +574,16 @@ fn build_ai_context(
         }
         sources
     } else {
-        let mut stmt =
-            conn.prepare("SELECT id, name, file_path, file_format FROM data_sources ORDER BY name")?;
+        let mut stmt = conn.prepare(
+            "SELECT id, name, file_path, file_paths, file_format FROM data_sources ORDER BY name",
+        )?;
         let rows = stmt.query_map([], |row| {
             Ok((
                 row.get::<_, String>(0)?,
                 row.get::<_, String>(1)?,
                 row.get::<_, String>(2)?,
-                row.get::<_, String>(3)?,
+                row.get::<_, Option<String>>(3)?,
+                row.get::<_, String>(4)?,
             ))
         })?;
         rows.collect::<Result<Vec<_>, _>>()?
@@ -588,8 +592,9 @@ fn build_ai_context(
 
     sources
         .into_iter()
-        .map(|(id, name, file_path, file_format)| {
-            let preview = duckdb.preview_source(&file_path, &file_format, SAMPLE_ROW_LIMIT)?;
+        .map(|(id, name, file_path, file_paths, file_format)| {
+            let file_paths = deserialize_file_paths(file_path, file_paths)?;
+            let preview = duckdb.preview_source(&file_paths, &file_format, SAMPLE_ROW_LIMIT)?;
             Ok(AiDataSourceContext {
                 data_source_id: id,
                 name,

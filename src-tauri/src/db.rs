@@ -29,6 +29,7 @@ impl Database {
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
                 file_path TEXT NOT NULL UNIQUE,
+                file_paths TEXT,
                 file_format TEXT NOT NULL,
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -167,6 +168,34 @@ impl Database {
 
         if !has_query_tab_result_cache {
             conn.execute("ALTER TABLE query_tabs ADD COLUMN result_cache TEXT", [])?;
+        }
+
+        let has_data_source_file_paths = conn
+            .prepare("PRAGMA table_info(data_sources)")?
+            .query_map([], |row| row.get::<_, String>(1))?
+            .collect::<Result<Vec<_>, _>>()?
+            .iter()
+            .any(|column| column == "file_paths");
+
+        if !has_data_source_file_paths {
+            conn.execute("ALTER TABLE data_sources ADD COLUMN file_paths TEXT", [])?;
+        }
+
+        let legacy_sources = {
+            let mut stmt =
+                conn.prepare("SELECT id, file_path FROM data_sources WHERE file_paths IS NULL")?;
+            let sources = stmt
+                .query_map([], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+                })?
+                .collect::<Result<Vec<_>, _>>()?;
+            sources
+        };
+        for (id, file_path) in legacy_sources {
+            conn.execute(
+                "UPDATE data_sources SET file_paths = ?1 WHERE id = ?2",
+                rusqlite::params![serde_json::to_string(&vec![file_path])?, id],
+            )?;
         }
 
         Ok(())

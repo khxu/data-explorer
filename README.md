@@ -39,12 +39,12 @@ This produces a native app bundle in `src-tauri/target/release/bundle/`.
 Before you can query anything, you need to tell Data Explorer where your files live.
 
 1. In the **sidebar**, click the **+** button next to "Data Sources"
-2. Click **Browse** to pick a file (`.parquet`, `.csv`, `.tsv`, `.json`, `.jsonl`, `.ndjson`)
+2. Click **Browse** to pick one or more files (`.parquet`, `.csv`, `.tsv`, `.json`, `.jsonl`, `.ndjson`). Files selected together must use the same format and are exposed as one table.
 3. Give it a **table name** — this is the name you'll use in SQL queries (e.g., `sales`, `users_2024`). It auto-fills from the filename.
 4. Optionally assign **tags** to organize it (you can always add/modify tags later)
 5. Click **Register**
 
-The file stays on disk — Data Explorer reads it on-the-fly via DuckDB's `read_parquet`, `read_csv`, or `read_json_auto` functions.
+The files stay on disk — Data Explorer reads them on-the-fly via DuckDB's `read_parquet`, `read_csv`, or `read_json_auto` functions. This supports partitioned datasets split across multiple Parquet files.
 
 To **unregister** a data source, hover over it in the sidebar and click the **✕** button. A confirmation dialog will appear before removal.
 

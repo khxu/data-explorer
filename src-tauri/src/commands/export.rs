@@ -1,6 +1,7 @@
 use std::path::Path;
 use tauri::State;
 
+use crate::commands::data_sources::deserialize_file_paths;
 use crate::db::Database;
 use crate::duckdb_engine::DuckDbEngine;
 use crate::error::AppError;
@@ -27,20 +28,27 @@ pub fn export_results(
     // Safety: check destination doesn't collide with any registered source
     {
         let conn = db.conn.lock().unwrap();
-        let mut stmt = conn.prepare("SELECT file_path FROM data_sources")?;
-        let paths: Vec<String> = stmt
-            .query_map([], |row| row.get::<_, String>(0))?
+        let mut stmt = conn.prepare("SELECT file_path, file_paths FROM data_sources")?;
+        let sources: Vec<(String, Option<String>)> = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
             .collect::<Result<Vec<_>, _>>()?;
+        let paths = sources
+            .into_iter()
+            .map(|(path, paths)| deserialize_file_paths(path, paths))
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>();
 
         let dest_canonical = std::fs::canonicalize(dest.parent().unwrap_or(Path::new(".")))
             .unwrap_or_else(|_| dest.to_path_buf())
             .join(dest.file_name().unwrap_or_default());
 
-        for source_path in &paths {
-            let source_canonical = std::fs::canonicalize(source_path)
-                .unwrap_or_else(|_| Path::new(source_path).to_path_buf());
+        for source_path in paths {
+            let source_canonical = std::fs::canonicalize(&source_path)
+                .unwrap_or_else(|_| Path::new(&source_path).to_path_buf());
             if dest_canonical == source_canonical {
-                return Err(AppError::ExportCollision(source_path.clone()));
+                return Err(AppError::ExportCollision(source_path));
             }
         }
     }

@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, State};
 
 use crate::commands::ai::AiTokenUsage;
+use crate::commands::data_sources::deserialize_file_paths;
 use crate::db::Database;
 use crate::duckdb_engine::{DuckDbEngine, SourcePreview};
 use crate::error::AppError;
@@ -189,7 +190,11 @@ pub fn preview_llm_input(
     )?;
     let preview = filter_preview_columns(preview, &selected_columns)?;
     Ok(LlmInputPreview {
-        columns: preview.columns.iter().map(|(name, _)| name.clone()).collect(),
+        columns: preview
+            .columns
+            .iter()
+            .map(|(name, _)| name.clone())
+            .collect(),
         column_types: preview
             .columns
             .iter()
@@ -231,7 +236,15 @@ pub async fn start_llm_run(
     experiment_id: String,
 ) -> Result<LlmRun, AppError> {
     let run_id = uuid::Uuid::new_v4().to_string();
-    execute_run(app, db.inner().clone(), duckdb.inner().clone(), experiment_id, run_id, false).await
+    execute_run(
+        app,
+        db.inner().clone(),
+        duckdb.inner().clone(),
+        experiment_id,
+        run_id,
+        false,
+    )
+    .await
 }
 
 #[tauri::command]
@@ -252,7 +265,15 @@ pub async fn resume_llm_run(
     run_id: String,
 ) -> Result<LlmRun, AppError> {
     let experiment_id = run_experiment_id(db.inner(), &run_id)?;
-    execute_run(app, db.inner().clone(), duckdb.inner().clone(), experiment_id, run_id, false).await
+    execute_run(
+        app,
+        db.inner().clone(),
+        duckdb.inner().clone(),
+        experiment_id,
+        run_id,
+        false,
+    )
+    .await
 }
 
 #[tauri::command]
@@ -263,7 +284,15 @@ pub async fn retry_failed_llm_run(
     run_id: String,
 ) -> Result<LlmRun, AppError> {
     let experiment_id = run_experiment_id(db.inner(), &run_id)?;
-    execute_run(app, db.inner().clone(), duckdb.inner().clone(), experiment_id, run_id, true).await
+    execute_run(
+        app,
+        db.inner().clone(),
+        duckdb.inner().clone(),
+        experiment_id,
+        run_id,
+        true,
+    )
+    .await
 }
 
 async fn execute_run(
@@ -279,7 +308,9 @@ async fn execute_run(
         load_experiment(&conn, &experiment_id)?
     };
     if experiment.models.is_empty() {
-        return Err(AppError::General("Select at least one Copilot model.".to_string()));
+        return Err(AppError::General(
+            "Select at least one Copilot model.".to_string(),
+        ));
     }
     if experiment.user_prompt.trim().is_empty() && experiment.system_prompt.trim().is_empty() {
         return Err(AppError::General(
@@ -289,7 +320,9 @@ async fn execute_run(
 
     let rows = materialize_input_rows(&db, &duckdb, &experiment)?;
     if rows.is_empty() {
-        return Err(AppError::General("The selected input has no rows.".to_string()));
+        return Err(AppError::General(
+            "The selected input has no rows.".to_string(),
+        ));
     }
     let total_count = (rows.len() * experiment.models.len()) as i64;
     initialize_run(&db, &run_id, &experiment.id, total_count, retry_failed)?;
@@ -305,16 +338,8 @@ async fn execute_run(
     );
 
     let client = Client::start(ClientOptions::default()).await?;
-    let result = execute_run_with_client(
-        &app,
-        &db,
-        &client,
-        &experiment,
-        &run_id,
-        rows,
-        retry_failed,
-    )
-    .await;
+    let result =
+        execute_run_with_client(&app, &db, &client, &experiment, &run_id, rows, retry_failed).await;
     let stop_result = client
         .stop()
         .await
@@ -349,7 +374,8 @@ async fn execute_run_with_client(
                 continue;
             }
 
-            let rendered_system = prompt_template::interpolate(&experiment.system_prompt, &row.data);
+            let rendered_system =
+                prompt_template::interpolate(&experiment.system_prompt, &row.data);
             let rendered_user = prompt_template::interpolate(&experiment.user_prompt, &row.data);
             let result_id = upsert_running_result(
                 db,
@@ -375,16 +401,13 @@ async fn execute_run_with_client(
             );
 
             let start = Instant::now();
-            let response = run_copilot_prompt(client, model, &rendered_system, &rendered_user).await;
+            let response =
+                run_copilot_prompt(client, model, &rendered_system, &rendered_user).await;
             let latency_ms = start.elapsed().as_millis() as i64;
             match response {
-                Ok((output, usage)) => update_result_success(
-                    db,
-                    &result_id,
-                    &output,
-                    usage.as_ref(),
-                    latency_ms,
-                )?,
+                Ok((output, usage)) => {
+                    update_result_success(db, &result_id, &output, usage.as_ref(), latency_ms)?
+                }
                 Err(err) => update_result_error(db, &result_id, &err.to_string(), latency_ms)?,
             }
             update_run_status_counts(db, run_id, "running", None)?;
@@ -500,7 +523,10 @@ async fn run_copilot_prompt(
                     "session.idle" => break,
                     "session.error" => {
                         let err: SessionErrorData = serde_json::from_value(event.data.clone())?;
-                        return Err(AppError::General(format!("Copilot session error: {}", err.message)));
+                        return Err(AppError::General(format!(
+                            "Copilot session error: {}",
+                            err.message
+                        )));
                     }
                     _ => {}
                 },
@@ -564,19 +590,23 @@ fn materialize_preview(
                 AppError::General("Choose a data source for this LLM experiment.".to_string())
             })?;
             let conn = db.conn.lock().unwrap();
-            let (file_path, file_format): (String, String) = conn.query_row(
-                "SELECT file_path, file_format FROM data_sources WHERE id = ?1",
-                rusqlite::params![id],
-                |row| Ok((row.get(0)?, row.get(1)?)),
-            )?;
+            let (file_path, file_paths, file_format): (String, Option<String>, String) = conn
+                .query_row(
+                    "SELECT file_path, file_paths, file_format FROM data_sources WHERE id = ?1",
+                    rusqlite::params![id],
+                    |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+                )?;
             drop(conn);
-            duckdb.source_rows(&file_path, &file_format, limit)
+            let file_paths = deserialize_file_paths(file_path, file_paths)?;
+            duckdb.source_rows(&file_paths, &file_format, limit)
         }
         "sql" => {
             let sql = sql_text
                 .map(str::trim)
                 .filter(|value| !value.is_empty())
-                .ok_or_else(|| AppError::General("Enter SQL for this LLM experiment.".to_string()))?;
+                .ok_or_else(|| {
+                    AppError::General("Enter SQL for this LLM experiment.".to_string())
+                })?;
             duckdb.query_rows(sql, limit)
         }
         other => Err(AppError::General(format!(
@@ -603,7 +633,10 @@ fn filter_preview_columns(
                 .ok_or_else(|| AppError::General(format!("Unknown selected column: {}", column)))
         })
         .collect::<Result<Vec<_>, _>>()?;
-    let columns = indexes.iter().map(|index| preview.columns[*index].clone()).collect();
+    let columns = indexes
+        .iter()
+        .map(|index| preview.columns[*index].clone())
+        .collect();
     let rows = preview
         .rows
         .into_iter()
@@ -617,7 +650,9 @@ fn validate_experiment_draft(draft: &LlmExperimentDraft) -> Result<(), AppError>
         return Err(AppError::General("Name the LLM experiment.".to_string()));
     }
     if draft.models.is_empty() {
-        return Err(AppError::General("Select at least one Copilot model.".to_string()));
+        return Err(AppError::General(
+            "Select at least one Copilot model.".to_string(),
+        ));
     }
     if draft.system_prompt.trim().is_empty() && draft.user_prompt.trim().is_empty() {
         return Err(AppError::General(
@@ -866,10 +901,7 @@ fn run_experiment_id(db: &Database, run_id: &str) -> Result<String, AppError> {
     )?)
 }
 
-fn load_experiment(
-    conn: &rusqlite::Connection,
-    id: &str,
-) -> Result<LlmExperiment, AppError> {
+fn load_experiment(conn: &rusqlite::Connection, id: &str) -> Result<LlmExperiment, AppError> {
     Ok(conn.query_row(
         "SELECT id, name, input_source_type, data_source_id, sql_text, selected_columns,
                 system_prompt, user_prompt, models, created_at, updated_at
@@ -1031,6 +1063,9 @@ fn emit_progress_with_counts(
 }
 
 #[allow(dead_code)]
-fn row_to_object(columns: &[String], values: Vec<serde_json::Value>) -> HashMap<String, serde_json::Value> {
+fn row_to_object(
+    columns: &[String],
+    values: Vec<serde_json::Value>,
+) -> HashMap<String, serde_json::Value> {
     columns.iter().cloned().zip(values).collect()
 }

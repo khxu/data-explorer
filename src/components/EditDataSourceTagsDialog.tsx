@@ -65,8 +65,13 @@ export function EditDataSourceTagsDialog({ open: isOpen, onClose, dataSource }: 
           <DialogTitle className="truncate">Edit Tags — {dataSource.name}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
-          <p className="text-xs text-muted-foreground break-all" title={dataSource.file_path}>
-            {dataSource.file_path}
+          <p
+            className="text-xs text-muted-foreground break-all"
+            title={dataSource.file_paths.join("\n")}
+          >
+            {dataSource.file_paths.length > 1
+              ? `${dataSource.file_paths.length} files`
+              : dataSource.file_path}
           </p>
           {tags.length > 0 ? (
             <div className="space-y-2">
