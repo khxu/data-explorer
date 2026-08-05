@@ -60,19 +60,24 @@ export function EditDataSourceTagsDialog({ open: isOpen, onClose, dataSource }: 
 
   return (
     <Dialog open={isOpen} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="sm:max-w-sm">
-        <DialogHeader>
+      <DialogContent className="min-w-0 sm:max-w-sm">
+        <DialogHeader className="min-w-0">
           <DialogTitle className="truncate">Edit Tags — {dataSource.name}</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4">
-          <p
-            className="text-xs text-muted-foreground break-all"
-            title={dataSource.file_paths.join("\n")}
-          >
-            {dataSource.file_paths.length > 1
-              ? `${dataSource.file_paths.length} files`
-              : dataSource.file_path}
-          </p>
+        <div className="min-w-0 space-y-4">
+          {dataSource.file_paths.length > 1 ? (
+            <ul className="max-h-48 list-disc space-y-1 overflow-y-auto pl-4 text-xs text-muted-foreground">
+              {dataSource.file_paths.map((filePath) => (
+                <li key={filePath} className="max-w-full [overflow-wrap:anywhere]">
+                  {filePath}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="max-w-full text-xs text-muted-foreground [overflow-wrap:anywhere]">
+              {dataSource.file_path}
+            </p>
+          )}
           {tags.length > 0 ? (
             <div className="space-y-2">
               <Label>Tags</Label>
