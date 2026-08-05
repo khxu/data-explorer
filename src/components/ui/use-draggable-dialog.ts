@@ -6,12 +6,17 @@ const INTERACTIVE_SELECTOR =
 
 interface DragState {
   pointerId: number
+  element: HTMLElement
   startX: number
   startY: number
   startLeft: number
   startTop: number
   width: number
   height: number
+  left: number
+  top: number
+  moved: boolean
+  cleanup: () => void
 }
 
 type PointerHandlers = Pick<
@@ -33,6 +38,15 @@ export function useDraggableDialog(
   } | null>(null)
   const dragState = React.useRef<DragState | null>(null)
 
+  React.useEffect(() => {
+    return () => {
+      const drag = dragState.current
+      if (drag) {
+        drag.cleanup()
+      }
+    }
+  }, [])
+
   function onPointerDown(event: React.PointerEvent<HTMLElement>) {
     handlers.onPointerDown?.(event)
     if (event.defaultPrevented) return
@@ -43,59 +57,94 @@ export function useDraggableDialog(
     if (!header || target.closest(INTERACTIVE_SELECTOR)) return
 
     const rect = event.currentTarget.getBoundingClientRect()
-    dragState.current = {
+    const element = event.currentTarget
+
+    const drag: DragState = {
       pointerId: event.pointerId,
+      element,
       startX: event.clientX,
       startY: event.clientY,
       startLeft: rect.left,
       startTop: rect.top,
       width: rect.width,
       height: rect.height,
+      left: rect.left,
+      top: rect.top,
+      moved: false,
+      cleanup: () => {},
     }
-    event.currentTarget.setPointerCapture(event.pointerId)
-    event.preventDefault()
-  }
+    dragState.current = drag
 
-  function onPointerMove(event: React.PointerEvent<HTMLElement>) {
-    handlers.onPointerMove?.(event)
-    const drag = dragState.current
-    if (!drag || drag.pointerId !== event.pointerId) return
+    const move = (pointerEvent: PointerEvent) => {
+      if (pointerEvent.pointerId !== drag.pointerId) return
 
-    const maxLeft = Math.max(
-      VIEWPORT_MARGIN,
-      window.innerWidth - drag.width - VIEWPORT_MARGIN
-    )
-    const maxTop = Math.max(
-      VIEWPORT_MARGIN,
-      window.innerHeight - drag.height - VIEWPORT_MARGIN
-    )
+      const maxLeft = Math.max(
+        VIEWPORT_MARGIN,
+        window.innerWidth - drag.width - VIEWPORT_MARGIN
+      )
+      const maxTop = Math.max(
+        VIEWPORT_MARGIN,
+        window.innerHeight - drag.height - VIEWPORT_MARGIN
+      )
 
-    setPosition({
-      left: Math.min(
+      drag.left = Math.min(
         maxLeft,
         Math.max(
           VIEWPORT_MARGIN,
-          drag.startLeft + event.clientX - drag.startX
+          drag.startLeft + pointerEvent.clientX - drag.startX
         )
-      ),
-      top: Math.min(
+      )
+      drag.top = Math.min(
         maxTop,
         Math.max(
           VIEWPORT_MARGIN,
-          drag.startTop + event.clientY - drag.startY
+          drag.startTop + pointerEvent.clientY - drag.startY
         )
-      ),
-    })
-  }
-
-  function stopDragging(
-    event: React.PointerEvent<HTMLElement>,
-    handler?: React.PointerEventHandler<HTMLElement>
-  ) {
-    handler?.(event)
-    if (dragState.current?.pointerId === event.pointerId) {
-      dragState.current = null
+      )
+      drag.moved = true
+      const deltaX = drag.left - drag.startLeft
+      const deltaY = drag.top - drag.startTop
+      drag.element.style.transform = `translate3d(${deltaX}px, ${deltaY}px, 0)`
     }
+
+    const stop = (pointerEvent: PointerEvent) => {
+      if (pointerEvent.pointerId !== drag.pointerId) return
+
+      drag.cleanup()
+      dragState.current = null
+      if (!drag.moved) return
+
+      drag.element.style.left = `${drag.left}px`
+      drag.element.style.top = `${drag.top}px`
+      drag.element.style.translate = "none"
+      drag.element.style.transform = ""
+      setPosition({ left: drag.left, top: drag.top })
+    }
+
+    const stopOnBlur = () => {
+      drag.cleanup()
+      drag.element.style.left = `${drag.left}px`
+      drag.element.style.top = `${drag.top}px`
+      drag.element.style.translate = "none"
+      drag.element.style.transform = ""
+      dragState.current = null
+      if (drag.moved) {
+        setPosition({ left: drag.left, top: drag.top })
+      }
+    }
+
+    drag.cleanup = () => {
+      window.removeEventListener("pointermove", move)
+      window.removeEventListener("pointerup", stop)
+      window.removeEventListener("pointercancel", stop)
+      window.removeEventListener("blur", stopOnBlur)
+    }
+
+    window.addEventListener("pointermove", move)
+    window.addEventListener("pointerup", stop)
+    window.addEventListener("pointercancel", stop)
+    window.addEventListener("blur", stopOnBlur)
+    event.preventDefault()
   }
 
   return {
@@ -108,13 +157,10 @@ export function useDraggableDialog(
       : undefined,
     dragHandlers: {
       onPointerDown,
-      onPointerMove,
-      onPointerUp: (event: React.PointerEvent<HTMLElement>) =>
-        stopDragging(event, handlers.onPointerUp),
-      onPointerCancel: (event: React.PointerEvent<HTMLElement>) =>
-        stopDragging(event, handlers.onPointerCancel),
-      onLostPointerCapture: (event: React.PointerEvent<HTMLElement>) =>
-        stopDragging(event, handlers.onLostPointerCapture),
+      onPointerMove: handlers.onPointerMove,
+      onPointerUp: handlers.onPointerUp,
+      onPointerCancel: handlers.onPointerCancel,
+      onLostPointerCapture: handlers.onLostPointerCapture,
     },
   }
 }
