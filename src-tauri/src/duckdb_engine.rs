@@ -51,7 +51,10 @@ impl Drop for ActiveQueryGuard<'_> {
 impl DuckDbEngine {
     pub fn new() -> Result<Self, AppError> {
         let conn = Connection::open_in_memory()?;
-        conn.execute_batch("LOAD icu")?;
+        conn.execute_batch(
+            "SET disabled_optimizers = 'compressed_materialization';
+             LOAD icu",
+        )?;
         Ok(Self {
             conn: Mutex::new(conn),
             sources: Mutex::new(HashMap::new()),
@@ -672,6 +675,25 @@ fn is_clause_boundary_keyword(value: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::DuckDbEngine;
+
+    #[test]
+    fn disables_compressed_materialization_optimizer() {
+        let engine = DuckDbEngine::new().unwrap();
+        let conn = engine.conn.lock().unwrap();
+        let disabled: String = conn
+            .query_row(
+                "SELECT value
+                 FROM duckdb_settings()
+                 WHERE name = 'disabled_optimizers'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+
+        assert!(disabled
+            .split(',')
+            .any(|optimizer| optimizer == "compressed_materialization"));
+    }
 
     #[test]
     fn trims_trailing_statement_terminators_for_embedded_queries() {
