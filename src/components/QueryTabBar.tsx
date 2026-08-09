@@ -209,7 +209,7 @@ export function QueryTabBar() {
   }
 
   return (
-    <div className="flex h-full w-60 shrink-0 flex-col border-r bg-muted/20">
+    <div className="flex h-full w-full flex-col border-r bg-muted/20">
       <div className="space-y-2 border-b p-2">
         <div className="flex items-center justify-between gap-2">
           <span className="text-xs font-medium text-muted-foreground">Query tabs</span>
