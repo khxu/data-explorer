@@ -12,6 +12,9 @@ import "./App.css";
 const SIDEBAR_WIDTH_STORAGE_KEY = "data-explorer.sidebarWidth";
 const SIDEBAR_WIDTH_BOUNDS = { min: 180, max: 600 };
 const DEFAULT_SIDEBAR_WIDTH = 256;
+const QUERY_TABS_WIDTH_STORAGE_KEY = "data-explorer.queryTabsWidth";
+const QUERY_TABS_WIDTH_BOUNDS = { min: 180, max: 480 };
+const DEFAULT_QUERY_TABS_WIDTH = 240;
 
 function AppContent() {
   const { error, setError, activeTab, setActiveTab, refreshHistory } = useAppState();
@@ -20,14 +23,20 @@ function AppContent() {
     DEFAULT_SIDEBAR_WIDTH,
     SIDEBAR_WIDTH_BOUNDS
   );
-  const isResizing = useRef(false);
+  const [queryTabsWidth, setQueryTabsWidth] = usePersistedNumber(
+    QUERY_TABS_WIDTH_STORAGE_KEY,
+    DEFAULT_QUERY_TABS_WIDTH,
+    QUERY_TABS_WIDTH_BOUNDS
+  );
+  const isResizingSidebar = useRef(false);
+  const isResizingQueryTabs = useRef(false);
 
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+  const handleSidebarMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
-    isResizing.current = true;
+    isResizingSidebar.current = true;
 
     const onMouseMove = (ev: MouseEvent) => {
-      if (!isResizing.current) return;
+      if (!isResizingSidebar.current) return;
       const newWidth = Math.min(
         Math.max(ev.clientX, SIDEBAR_WIDTH_BOUNDS.min),
         SIDEBAR_WIDTH_BOUNDS.max
@@ -36,7 +45,7 @@ function AppContent() {
     };
 
     const onMouseUp = () => {
-      isResizing.current = false;
+      isResizingSidebar.current = false;
       document.removeEventListener("mousemove", onMouseMove);
       document.removeEventListener("mouseup", onMouseUp);
       document.body.style.cursor = "";
@@ -47,7 +56,32 @@ function AppContent() {
     document.body.style.userSelect = "none";
     document.addEventListener("mousemove", onMouseMove);
     document.addEventListener("mouseup", onMouseUp);
-  }, []);
+  }, [setSidebarWidth]);
+
+  const handleQueryTabsMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizingQueryTabs.current = true;
+    const startX = e.clientX;
+    const startWidth = queryTabsWidth;
+
+    const onMouseMove = (ev: MouseEvent) => {
+      if (!isResizingQueryTabs.current) return;
+      setQueryTabsWidth(startWidth + ev.clientX - startX);
+    };
+
+    const onMouseUp = () => {
+      isResizingQueryTabs.current = false;
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+  }, [queryTabsWidth, setQueryTabsWidth]);
 
   return (
     <div className="flex h-screen w-screen overflow-hidden">
@@ -63,7 +97,7 @@ function AppContent() {
       </div>
       <div
         className="w-1.5 cursor-col-resize bg-border/50 hover:bg-primary/30 active:bg-primary/50 transition-colors flex-shrink-0"
-        onMouseDown={handleMouseDown}
+        onMouseDown={handleSidebarMouseDown}
       />
       <main className="flex-1 flex flex-col min-w-0">
         {/* Error banner */}
@@ -91,7 +125,21 @@ function AppContent() {
             <TabsTrigger value="llm-runs">LLM Runs</TabsTrigger>
           </TabsList>
           <TabsContent value="query" className="flex-1 min-h-0 mt-0 flex">
-            <QueryTabBar />
+            <div
+              style={{
+                width: queryTabsWidth,
+                minWidth: QUERY_TABS_WIDTH_BOUNDS.min,
+                maxWidth: QUERY_TABS_WIDTH_BOUNDS.max,
+              }}
+              className="shrink-0"
+            >
+              <QueryTabBar />
+            </div>
+            <div
+              className="w-1.5 shrink-0 cursor-col-resize bg-border/50 transition-colors hover:bg-primary/30 active:bg-primary/50"
+              onMouseDown={handleQueryTabsMouseDown}
+              title="Resize query tabs sidebar"
+            />
             <div className="flex-1 min-h-0 min-w-0">
               <QueryEditor />
             </div>
