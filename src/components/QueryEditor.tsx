@@ -145,7 +145,7 @@ export function QueryEditor() {
     <div className="flex h-full min-w-0">
       <div className="flex flex-col h-full min-w-0 flex-1">
         {/* SQL Editor */}
-        <div className="p-3 border-b space-y-2">
+        <div className="p-3 border-b space-y-2 shrink-0">
           <SqlEditor
             key={tabId}
             value={sql}
