@@ -47,8 +47,9 @@ interface SqlEditorProps {
 }
 
 const SQL_EDITOR_HEIGHT_STORAGE_KEY = "data-explorer.sqlEditorHeight";
-const SQL_EDITOR_HEIGHT_BOUNDS = { min: 80, max: 600 };
+const SQL_EDITOR_HEIGHT_BOUNDS = { min: 80, max: 20000 };
 const DEFAULT_SQL_EDITOR_HEIGHT = 150;
+const SQL_EDITOR_BOTTOM_GAP = 96;
 
 export function SqlEditor({
   value,
@@ -303,13 +304,21 @@ export function SqlEditor({
     resizing.current = true;
     const startY = e.clientY;
     const startH = height;
+    const editorTop = containerRef.current?.getBoundingClientRect().top ?? 0;
+    const maxHeight = Math.max(
+      SQL_EDITOR_HEIGHT_BOUNDS.min,
+      Math.min(
+        window.innerHeight - editorTop - SQL_EDITOR_BOTTOM_GAP,
+        SQL_EDITOR_HEIGHT_BOUNDS.max
+      )
+    );
 
     const onMove = (ev: MouseEvent) => {
       if (!resizing.current) return;
       setHeight(
         Math.max(
           SQL_EDITOR_HEIGHT_BOUNDS.min,
-          Math.min(startH + ev.clientY - startY, SQL_EDITOR_HEIGHT_BOUNDS.max)
+          Math.min(startH + ev.clientY - startY, maxHeight)
         )
       );
     };
