@@ -380,6 +380,47 @@ export interface LlmRunProgress {
   message: string | null;
 }
 
+export type OpenAiBatchEndpoint = "responses" | "chat_completions";
+
+export interface OpenAiCredentialStatus {
+  configured: boolean;
+}
+
+export interface OpenAiBatchOptions {
+  temperature: number | null;
+  topP: number | null;
+  maxOutputTokens: number | null;
+  advanced: Record<string, unknown>;
+}
+
+export interface OpenAiBatchExportFile {
+  destination_path: string;
+  request_count: number;
+  byte_count: number;
+}
+
+export interface OpenAiBatchExportResult {
+  files: OpenAiBatchExportFile[];
+  request_count: number;
+  byte_count: number;
+}
+
+export async function getOpenAiCredentialStatus(): Promise<OpenAiCredentialStatus> {
+  return invoke("get_openai_credential_status");
+}
+
+export async function setOpenAiApiKey(apiKey: string): Promise<OpenAiCredentialStatus> {
+  return invoke("set_openai_api_key", { apiKey });
+}
+
+export async function deleteOpenAiApiKey(): Promise<OpenAiCredentialStatus> {
+  return invoke("delete_openai_api_key");
+}
+
+export async function listOpenAiModels(): Promise<string[]> {
+  return invoke("list_openai_models");
+}
+
 export async function listLlmExperiments(): Promise<LlmExperiment[]> {
   return invoke("list_llm_experiments");
 }
@@ -407,6 +448,22 @@ export async function previewLlmInput(
     sqlText,
     selectedColumns,
     limit,
+  });
+}
+
+export async function exportOpenAiBatchJsonl(
+  draft: LlmExperimentDraft,
+  model: string,
+  endpoint: OpenAiBatchEndpoint,
+  options: OpenAiBatchOptions,
+  destinationPath: string
+): Promise<OpenAiBatchExportResult> {
+  return invoke("export_openai_batch_jsonl", {
+    draft,
+    model,
+    endpoint,
+    options,
+    destinationPath,
   });
 }
 

@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useAppState } from "@/hooks/useAppState";
+import { OpenAiBatchExportDialog } from "./OpenAiBatchExportDialog";
 import {
   cancelLlmRun,
   deleteLlmExperiment,
@@ -50,6 +51,7 @@ export function LlmRunsPanel() {
   const [progress, setProgress] = useState<LlmRunProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [showBatchExport, setShowBatchExport] = useState(false);
   const systemPromptRef = useRef<HTMLTextAreaElement | null>(null);
   const userPromptRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -300,7 +302,7 @@ export function LlmRunsPanel() {
 
         {preview && (
           <div className="space-y-2 rounded-md border p-2">
-            <div className="text-xs font-medium">Columns sent to Copilot</div>
+            <div className="text-xs font-medium">Columns available to prompts</div>
             <div className="max-h-36 overflow-y-auto space-y-1">
               {preview.columns.map((column) => (
                 <label key={column} className="flex items-center gap-2 text-xs">
@@ -355,7 +357,7 @@ export function LlmRunsPanel() {
         )}
 
         <div className="space-y-2 rounded-md border p-2">
-          <div className="text-xs font-medium">Models</div>
+          <div className="text-xs font-medium">Copilot run models</div>
           <div className="max-h-40 overflow-y-auto space-y-1">
             {models.map((model) => (
               <label key={model.id} className="flex items-center gap-2 text-xs">
@@ -380,6 +382,14 @@ export function LlmRunsPanel() {
         <div className="flex gap-2">
           <Button size="sm" onClick={handleSave} disabled={busy}>Save</Button>
           <Button size="sm" onClick={handleRun} disabled={busy}>Run</Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setShowBatchExport(true)}
+            disabled={busy}
+          >
+            Export Batch JSONL
+          </Button>
           {(activeRun?.status === "running" || busy) && (
             <>
               <Button size="sm" variant="outline" onClick={() => void handleRunAction("pause")}>Pause</Button>
@@ -462,6 +472,12 @@ export function LlmRunsPanel() {
 
         <ResultsTable results={results} />
       </div>
+
+      <OpenAiBatchExportDialog
+        open={showBatchExport}
+        onClose={() => setShowBatchExport(false)}
+        draft={form}
+      />
     </div>
   );
 }

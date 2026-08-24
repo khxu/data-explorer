@@ -1,4 +1,7 @@
 use std::collections::HashMap;
+use std::fs::OpenOptions;
+use std::io::{BufWriter, Write};
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -14,12 +17,16 @@ use tauri::{AppHandle, Emitter, State};
 
 use crate::commands::ai::AiTokenUsage;
 use crate::commands::data_sources::deserialize_file_paths;
+use crate::commands::export::validate_export_destination;
 use crate::db::Database;
 use crate::duckdb_engine::{DuckDbEngine, SourcePreview};
 use crate::error::AppError;
 use crate::prompt_template;
 
 const LLM_ROW_TIMEOUT: Duration = Duration::from_secs(120);
+const OPENAI_BATCH_MAX_REQUESTS: usize = 50_000;
+const OPENAI_BATCH_MAX_BYTES: u64 = 200 * 1024 * 1024;
+const EMPTY_USER_PROMPT_FALLBACK: &str = "Process this row according to the system prompt.";
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct LlmExperiment {
@@ -107,6 +114,61 @@ pub struct LlmRunProgress {
 struct InputRow {
     row_index: i64,
     data: serde_json::Map<String, serde_json::Value>,
+}
+
+#[derive(Debug, Deserialize, Clone, Copy)]
+#[serde(rename_all = "snake_case")]
+pub enum OpenAiBatchEndpoint {
+    Responses,
+    ChatCompletions,
+}
+
+impl OpenAiBatchEndpoint {
+    fn url(self) -> &'static str {
+        match self {
+            Self::Responses => "/v1/responses",
+            Self::ChatCompletions => "/v1/chat/completions",
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct OpenAiBatchOptions {
+    pub temperature: Option<f64>,
+    pub top_p: Option<f64>,
+    pub max_output_tokens: Option<u64>,
+    #[serde(default)]
+    pub advanced: serde_json::Map<String, serde_json::Value>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct OpenAiBatchExportFile {
+    pub destination_path: String,
+    pub request_count: usize,
+    pub byte_count: u64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct OpenAiBatchExportResult {
+    pub files: Vec<OpenAiBatchExportFile>,
+    pub request_count: usize,
+    pub byte_count: u64,
+}
+
+#[derive(Debug, Serialize)]
+struct OpenAiBatchRequest {
+    custom_id: String,
+    method: &'static str,
+    url: &'static str,
+    body: serde_json::Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct OpenAiBatchChunk {
+    start: usize,
+    end: usize,
+    byte_count: u64,
 }
 
 #[tauri::command]
@@ -201,6 +263,63 @@ pub fn preview_llm_input(
             .map(|(_, data_type)| data_type.clone())
             .collect(),
         rows: preview.rows,
+    })
+}
+
+#[tauri::command]
+pub fn export_openai_batch_jsonl(
+    db: State<'_, Arc<Database>>,
+    duckdb: State<'_, Arc<DuckDbEngine>>,
+    draft: LlmExperimentDraft,
+    model: String,
+    endpoint: OpenAiBatchEndpoint,
+    options: OpenAiBatchOptions,
+    destination_path: String,
+) -> Result<OpenAiBatchExportResult, AppError> {
+    validate_batch_export_draft(&draft, &model)?;
+    validate_openai_batch_options(&options)?;
+    let experiment = draft_to_materialization_experiment(draft);
+    let rows = materialize_input_rows(db.inner(), duckdb.inner(), &experiment, None)?;
+    if rows.is_empty() {
+        return Err(AppError::General(
+            "The selected input has no rows.".to_string(),
+        ));
+    }
+    validate_prompt_placeholders_against_columns(
+        &experiment.system_prompt,
+        &experiment.user_prompt,
+        rows[0].data.keys().map(String::as_str),
+    )?;
+
+    let chunks = plan_openai_batch_chunks(
+        &rows,
+        model.trim(),
+        endpoint,
+        &experiment.system_prompt,
+        &experiment.user_prompt,
+        &options,
+        OPENAI_BATCH_MAX_REQUESTS,
+        OPENAI_BATCH_MAX_BYTES,
+    )?;
+    let destination_paths = split_destination_paths(&destination_path, chunks.len())?;
+    for path in &destination_paths {
+        validate_export_destination(db.inner(), &path.to_string_lossy())?;
+    }
+    let files = write_openai_batch_parts(
+        &destination_paths,
+        &chunks,
+        &rows,
+        model.trim(),
+        endpoint,
+        &experiment.system_prompt,
+        &experiment.user_prompt,
+        &options,
+    )?;
+
+    Ok(OpenAiBatchExportResult {
+        request_count: files.iter().map(|file| file.request_count).sum(),
+        byte_count: files.iter().map(|file| file.byte_count).sum(),
+        files,
     })
 }
 
@@ -318,7 +437,7 @@ async fn execute_run(
         ));
     }
 
-    let rows = materialize_input_rows(&db, &duckdb, &experiment)?;
+    let rows = materialize_input_rows(&db, &duckdb, &experiment, None)?;
     if rows.is_empty() {
         return Err(AppError::General(
             "The selected input has no rows.".to_string(),
@@ -472,7 +591,7 @@ async fn run_copilot_prompt(
     let session = client.create_session(config).await?;
     let mut events = session.subscribe();
     let prompt = if user_prompt.trim().is_empty() {
-        "Process this row according to the system prompt.".to_string()
+        EMPTY_USER_PROMPT_FALLBACK.to_string()
     } else {
         user_prompt.to_string()
     };
@@ -550,6 +669,7 @@ fn materialize_input_rows(
     db: &Database,
     duckdb: &DuckDbEngine,
     experiment: &LlmExperiment,
+    limit: Option<usize>,
 ) -> Result<Vec<InputRow>, AppError> {
     let preview = materialize_preview(
         db,
@@ -557,7 +677,7 @@ fn materialize_input_rows(
         &experiment.input_source_type,
         experiment.data_source_id.as_deref(),
         experiment.sql_text.as_deref(),
-        None,
+        limit,
     )?;
     let preview = filter_preview_columns(preview, &experiment.selected_columns)?;
     let columns: Vec<String> = preview.columns.into_iter().map(|(name, _)| name).collect();
@@ -645,6 +765,77 @@ fn filter_preview_columns(
     Ok(SourcePreview { columns, rows })
 }
 
+fn draft_to_materialization_experiment(draft: LlmExperimentDraft) -> LlmExperiment {
+    LlmExperiment {
+        id: draft.id.unwrap_or_default(),
+        name: draft.name,
+        input_source_type: draft.input_source_type,
+        data_source_id: draft.data_source_id,
+        sql_text: draft.sql_text,
+        selected_columns: draft.selected_columns,
+        system_prompt: draft.system_prompt,
+        user_prompt: draft.user_prompt,
+        models: draft.models,
+        created_at: String::new(),
+        updated_at: String::new(),
+    }
+}
+
+fn validate_batch_export_draft(draft: &LlmExperimentDraft, model: &str) -> Result<(), AppError> {
+    if model.trim().is_empty() {
+        return Err(AppError::General(
+            "Enter an OpenAI model ID for the Batch export.".to_string(),
+        ));
+    }
+    validate_prompts_and_placeholders(draft)
+}
+
+fn validate_openai_batch_options(options: &OpenAiBatchOptions) -> Result<(), AppError> {
+    if let Some(temperature) = options.temperature {
+        if !temperature.is_finite() || !(0.0..=2.0).contains(&temperature) {
+            return Err(AppError::General(
+                "Temperature must be between 0 and 2.".to_string(),
+            ));
+        }
+    }
+    if let Some(top_p) = options.top_p {
+        if !top_p.is_finite() || !(0.0..=1.0).contains(&top_p) {
+            return Err(AppError::General(
+                "Top-p must be between 0 and 1.".to_string(),
+            ));
+        }
+    }
+    if options.max_output_tokens == Some(0) {
+        return Err(AppError::General(
+            "Maximum output tokens must be greater than zero.".to_string(),
+        ));
+    }
+
+    const RESERVED_KEYS: &[&str] = &[
+        "model",
+        "input",
+        "instructions",
+        "messages",
+        "stream",
+        "temperature",
+        "top_p",
+        "max_tokens",
+        "max_completion_tokens",
+        "max_output_tokens",
+    ];
+    if let Some(key) = options
+        .advanced
+        .keys()
+        .find(|key| RESERVED_KEYS.contains(&key.as_str()))
+    {
+        return Err(AppError::General(format!(
+            "Advanced JSON cannot set reserved field '{key}'."
+        )));
+    }
+
+    Ok(())
+}
+
 fn validate_experiment_draft(draft: &LlmExperimentDraft) -> Result<(), AppError> {
     if draft.name.trim().is_empty() {
         return Err(AppError::General("Name the LLM experiment.".to_string()));
@@ -654,18 +845,38 @@ fn validate_experiment_draft(draft: &LlmExperimentDraft) -> Result<(), AppError>
             "Select at least one Copilot model.".to_string(),
         ));
     }
+    validate_prompts_and_placeholders(draft)
+}
+
+fn validate_prompts_and_placeholders(draft: &LlmExperimentDraft) -> Result<(), AppError> {
     if draft.system_prompt.trim().is_empty() && draft.user_prompt.trim().is_empty() {
         return Err(AppError::General(
-            "Add a system or user prompt before saving.".to_string(),
+            "Add a system or user prompt before continuing.".to_string(),
         ));
     }
-    let available: std::collections::HashSet<&str> =
-        draft.selected_columns.iter().map(String::as_str).collect();
-    for placeholder in prompt_template::extract_placeholders(&draft.system_prompt)
+    if !draft.selected_columns.is_empty() {
+        validate_prompt_placeholders_against_columns(
+            &draft.system_prompt,
+            &draft.user_prompt,
+            draft.selected_columns.iter().map(String::as_str),
+        )?;
+    }
+    Ok(())
+}
+
+fn validate_prompt_placeholders_against_columns<'a>(
+    system_prompt: &str,
+    user_prompt: &str,
+    columns: impl IntoIterator<Item = &'a str>,
+) -> Result<(), AppError> {
+    let available = columns
         .into_iter()
-        .chain(prompt_template::extract_placeholders(&draft.user_prompt))
+        .collect::<std::collections::HashSet<_>>();
+    for placeholder in prompt_template::extract_placeholders(system_prompt)
+        .into_iter()
+        .chain(prompt_template::extract_placeholders(user_prompt))
     {
-        if !available.is_empty() && !available.contains(placeholder.as_str()) {
+        if !available.contains(placeholder.as_str()) {
             return Err(AppError::General(format!(
                 "Prompt references a column that is not selected: {}",
                 placeholder
@@ -673,6 +884,275 @@ fn validate_experiment_draft(draft: &LlmExperimentDraft) -> Result<(), AppError>
         }
     }
     Ok(())
+}
+
+fn build_openai_batch_request(
+    row: &InputRow,
+    model: &str,
+    endpoint: OpenAiBatchEndpoint,
+    system_prompt: &str,
+    user_prompt: &str,
+    options: &OpenAiBatchOptions,
+) -> OpenAiBatchRequest {
+    let rendered_system = prompt_template::interpolate(system_prompt, &row.data);
+    let rendered_user = prompt_template::interpolate(user_prompt, &row.data);
+    let input = if rendered_user.trim().is_empty() {
+        EMPTY_USER_PROMPT_FALLBACK
+    } else {
+        rendered_user.as_str()
+    };
+
+    let mut body = match endpoint {
+        OpenAiBatchEndpoint::Responses => {
+            let mut body = serde_json::Map::new();
+            body.insert("model".to_string(), serde_json::json!(model));
+            if !rendered_system.trim().is_empty() {
+                body.insert(
+                    "instructions".to_string(),
+                    serde_json::json!(rendered_system),
+                );
+            }
+            body.insert("input".to_string(), serde_json::json!(input));
+            serde_json::Value::Object(body)
+        }
+        OpenAiBatchEndpoint::ChatCompletions => {
+            let mut messages = Vec::new();
+            if !rendered_system.trim().is_empty() {
+                messages.push(serde_json::json!({
+                    "role": "system",
+                    "content": rendered_system,
+                }));
+            }
+            messages.push(serde_json::json!({
+                "role": "user",
+                "content": input,
+            }));
+            serde_json::json!({
+                "model": model,
+                "messages": messages,
+            })
+        }
+    };
+    let body_object = body
+        .as_object_mut()
+        .expect("OpenAI Batch request bodies are always JSON objects");
+    body_object.extend(options.advanced.clone());
+    if let Some(temperature) = options.temperature {
+        body_object.insert("temperature".to_string(), serde_json::json!(temperature));
+    }
+    if let Some(top_p) = options.top_p {
+        body_object.insert("top_p".to_string(), serde_json::json!(top_p));
+    }
+    if let Some(max_output_tokens) = options.max_output_tokens {
+        let key = match endpoint {
+            OpenAiBatchEndpoint::Responses => "max_output_tokens",
+            OpenAiBatchEndpoint::ChatCompletions => "max_completion_tokens",
+        };
+        body_object.insert(key.to_string(), serde_json::json!(max_output_tokens));
+    }
+
+    OpenAiBatchRequest {
+        custom_id: format!("row-{}", row.row_index),
+        method: "POST",
+        url: endpoint.url(),
+        body,
+    }
+}
+
+fn plan_openai_batch_chunks(
+    rows: &[InputRow],
+    model: &str,
+    endpoint: OpenAiBatchEndpoint,
+    system_prompt: &str,
+    user_prompt: &str,
+    options: &OpenAiBatchOptions,
+    max_requests: usize,
+    max_bytes: u64,
+) -> Result<Vec<OpenAiBatchChunk>, AppError> {
+    let request_sizes = rows
+        .iter()
+        .map(|row| {
+            let request = build_openai_batch_request(
+                row,
+                model,
+                endpoint,
+                system_prompt,
+                user_prompt,
+                options,
+            );
+            let line_size = serde_json::to_vec(&request)?.len() as u64 + 1;
+            Ok((row.row_index, line_size))
+        })
+        .collect::<Result<Vec<_>, AppError>>()?;
+    plan_openai_batch_chunk_sizes(&request_sizes, max_requests, max_bytes)
+}
+
+fn plan_openai_batch_chunk_sizes(
+    request_sizes: &[(i64, u64)],
+    max_requests: usize,
+    max_bytes: u64,
+) -> Result<Vec<OpenAiBatchChunk>, AppError> {
+    if max_requests == 0 || max_bytes == 0 {
+        return Err(AppError::General(
+            "OpenAI Batch chunk limits must be greater than zero.".to_string(),
+        ));
+    }
+
+    let mut chunks = Vec::new();
+    let mut start = 0;
+    let mut byte_count = 0_u64;
+
+    for (index, (row_index, line_size)) in request_sizes.iter().copied().enumerate() {
+        if line_size > max_bytes {
+            return Err(AppError::General(format!(
+                "The request for row {row_index} exceeds OpenAI's 200 MB Batch input file limit."
+            )));
+        }
+
+        let request_count = index - start;
+        if request_count == max_requests || byte_count + line_size > max_bytes {
+            chunks.push(OpenAiBatchChunk {
+                start,
+                end: index,
+                byte_count,
+            });
+            start = index;
+            byte_count = 0;
+        }
+        byte_count += line_size;
+    }
+
+    if start < request_sizes.len() {
+        chunks.push(OpenAiBatchChunk {
+            start,
+            end: request_sizes.len(),
+            byte_count,
+        });
+    }
+
+    Ok(chunks)
+}
+
+fn split_destination_paths(
+    destination_path: &str,
+    part_count: usize,
+) -> Result<Vec<PathBuf>, AppError> {
+    if part_count == 0 {
+        return Err(AppError::General(
+            "Cannot create an OpenAI Batch export with no parts.".to_string(),
+        ));
+    }
+    let destination = Path::new(destination_path);
+    if destination.file_name().is_none() {
+        return Err(AppError::General(
+            "Choose a filename for the OpenAI Batch export.".to_string(),
+        ));
+    }
+    if part_count == 1 {
+        return Ok(vec![destination.to_path_buf()]);
+    }
+
+    let stem = destination
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| AppError::General("Choose a valid export filename.".to_string()))?;
+    let extension = destination.extension().and_then(|value| value.to_str());
+    let width = 4.max(part_count.to_string().len());
+    Ok((1..=part_count)
+        .map(|part| {
+            let suffix = format!(
+                "{stem}-part-{part:0width$}-of-{part_count:0width$}",
+                width = width
+            );
+            let filename = match extension {
+                Some(extension) => format!("{suffix}.{extension}"),
+                None => suffix,
+            };
+            destination.with_file_name(filename)
+        })
+        .collect())
+}
+
+fn write_openai_batch_parts(
+    destination_paths: &[PathBuf],
+    chunks: &[OpenAiBatchChunk],
+    rows: &[InputRow],
+    model: &str,
+    endpoint: OpenAiBatchEndpoint,
+    system_prompt: &str,
+    user_prompt: &str,
+    options: &OpenAiBatchOptions,
+) -> Result<Vec<OpenAiBatchExportFile>, AppError> {
+    if destination_paths.len() != chunks.len() {
+        return Err(AppError::General(
+            "OpenAI Batch export paths do not match the planned parts.".to_string(),
+        ));
+    }
+
+    let mut created_paths = Vec::new();
+    let write_result = destination_paths
+        .iter()
+        .zip(chunks)
+        .map(|(path, chunk)| {
+            let file = OpenOptions::new().write(true).create_new(true).open(path)?;
+            created_paths.push(path.clone());
+            let (request_count, byte_count) = write_openai_batch_jsonl(
+                BufWriter::new(file),
+                &rows[chunk.start..chunk.end],
+                model,
+                endpoint,
+                system_prompt,
+                user_prompt,
+                options,
+            )?;
+            if request_count != chunk.end - chunk.start || byte_count != chunk.byte_count {
+                return Err(AppError::General(format!(
+                    "OpenAI Batch part changed between planning and writing: {}",
+                    path.display()
+                )));
+            }
+            Ok(OpenAiBatchExportFile {
+                destination_path: path.to_string_lossy().into_owned(),
+                request_count,
+                byte_count,
+            })
+        })
+        .collect::<Result<Vec<_>, AppError>>();
+
+    match write_result {
+        Ok(files) => Ok(files),
+        Err(error) => {
+            for path in created_paths {
+                let _ = std::fs::remove_file(path);
+            }
+            Err(error)
+        }
+    }
+}
+
+fn write_openai_batch_jsonl<W: Write>(
+    writer: W,
+    rows: &[InputRow],
+    model: &str,
+    endpoint: OpenAiBatchEndpoint,
+    system_prompt: &str,
+    user_prompt: &str,
+    options: &OpenAiBatchOptions,
+) -> Result<(usize, u64), AppError> {
+    let mut writer = writer;
+    let mut byte_count = 0_u64;
+
+    for row in rows {
+        let request =
+            build_openai_batch_request(row, model, endpoint, system_prompt, user_prompt, options);
+        let line = serde_json::to_vec(&request)?;
+        writer.write_all(&line)?;
+        writer.write_all(b"\n")?;
+        byte_count += line.len() as u64 + 1;
+    }
+    writer.flush()?;
+
+    Ok((rows.len(), byte_count))
 }
 
 fn initialize_run(
@@ -1068,4 +1548,389 @@ fn row_to_object(
     values: Vec<serde_json::Value>,
 ) -> HashMap<String, serde_json::Value> {
     columns.iter().cloned().zip(values).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn input_row(row_index: i64, value: serde_json::Value) -> InputRow {
+        InputRow {
+            row_index,
+            data: serde_json::Map::from_iter([("text".to_string(), value)]),
+        }
+    }
+
+    fn batch_draft() -> LlmExperimentDraft {
+        LlmExperimentDraft {
+            id: None,
+            name: String::new(),
+            input_source_type: "sql".to_string(),
+            data_source_id: None,
+            sql_text: Some("SELECT 1".to_string()),
+            selected_columns: vec!["text".to_string()],
+            system_prompt: "Classify {{text}}".to_string(),
+            user_prompt: "Input: {{text}}".to_string(),
+            models: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn builds_responses_request_with_rendered_prompts() {
+        let request = build_openai_batch_request(
+            &input_row(7, serde_json::json!("hello")),
+            "gpt-test",
+            OpenAiBatchEndpoint::Responses,
+            "System: {{text}}",
+            "User: {{text}}",
+            &OpenAiBatchOptions::default(),
+        );
+
+        assert_eq!(request.custom_id, "row-7");
+        assert_eq!(request.method, "POST");
+        assert_eq!(request.url, "/v1/responses");
+        assert_eq!(request.body["model"], "gpt-test");
+        assert_eq!(request.body["instructions"], "System: hello");
+        assert_eq!(request.body["input"], "User: hello");
+    }
+
+    #[test]
+    fn builds_chat_request_and_uses_system_only_fallback() {
+        let request = build_openai_batch_request(
+            &input_row(2, serde_json::json!("hello")),
+            "gpt-test",
+            OpenAiBatchEndpoint::ChatCompletions,
+            "System: {{text}}",
+            "",
+            &OpenAiBatchOptions::default(),
+        );
+
+        assert_eq!(request.url, "/v1/chat/completions");
+        assert_eq!(request.body["messages"][0]["role"], "system");
+        assert_eq!(request.body["messages"][0]["content"], "System: hello");
+        assert_eq!(request.body["messages"][1]["role"], "user");
+        assert_eq!(
+            request.body["messages"][1]["content"],
+            EMPTY_USER_PROMPT_FALLBACK
+        );
+    }
+
+    #[test]
+    fn writes_one_valid_json_value_per_line_with_unique_ids() {
+        let rows = vec![
+            input_row(0, serde_json::json!("first\nline")),
+            input_row(1, serde_json::json!("second")),
+        ];
+        let mut output = Vec::new();
+
+        let (request_count, byte_count) = write_openai_batch_jsonl(
+            &mut output,
+            &rows,
+            "gpt-test",
+            OpenAiBatchEndpoint::Responses,
+            "",
+            "{{text}}",
+            &OpenAiBatchOptions::default(),
+        )
+        .unwrap();
+
+        assert_eq!(request_count, 2);
+        assert_eq!(byte_count as usize, output.len());
+        let lines = String::from_utf8(output).unwrap();
+        let requests = lines
+            .lines()
+            .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(requests.len(), 2);
+        assert_eq!(requests[0]["custom_id"], "row-0");
+        assert_eq!(requests[0]["body"]["input"], "first\nline");
+        assert_eq!(requests[1]["custom_id"], "row-1");
+    }
+
+    #[test]
+    fn rejects_missing_model_without_requiring_a_copilot_model() {
+        let draft = batch_draft();
+
+        assert!(validate_batch_export_draft(&draft, "").is_err());
+        assert!(validate_batch_export_draft(&draft, "gpt-test").is_ok());
+    }
+
+    #[test]
+    fn adds_common_and_advanced_options_to_responses_requests() {
+        let options = OpenAiBatchOptions {
+            temperature: Some(0.4),
+            top_p: Some(0.8),
+            max_output_tokens: Some(512),
+            advanced: serde_json::Map::from_iter([(
+                "metadata".to_string(),
+                serde_json::json!({"source": "data-explorer"}),
+            )]),
+        };
+
+        let request = build_openai_batch_request(
+            &input_row(0, serde_json::json!("hello")),
+            "gpt-test",
+            OpenAiBatchEndpoint::Responses,
+            "",
+            "{{text}}",
+            &options,
+        );
+
+        assert_eq!(request.body["temperature"], 0.4);
+        assert_eq!(request.body["top_p"], 0.8);
+        assert_eq!(request.body["max_output_tokens"], 512);
+        assert_eq!(request.body["metadata"]["source"], "data-explorer");
+        assert!(request.body.get("max_completion_tokens").is_none());
+    }
+
+    #[test]
+    fn uses_chat_completions_token_limit_name() {
+        let options = OpenAiBatchOptions {
+            max_output_tokens: Some(256),
+            ..Default::default()
+        };
+
+        let request = build_openai_batch_request(
+            &input_row(0, serde_json::json!("hello")),
+            "gpt-test",
+            OpenAiBatchEndpoint::ChatCompletions,
+            "",
+            "{{text}}",
+            &options,
+        );
+
+        assert_eq!(request.body["max_completion_tokens"], 256);
+        assert!(request.body.get("max_output_tokens").is_none());
+    }
+
+    #[test]
+    fn rejects_invalid_and_conflicting_options() {
+        assert!(validate_openai_batch_options(&OpenAiBatchOptions {
+            temperature: Some(2.1),
+            ..Default::default()
+        })
+        .is_err());
+        assert!(validate_openai_batch_options(&OpenAiBatchOptions {
+            top_p: Some(-0.1),
+            ..Default::default()
+        })
+        .is_err());
+        assert!(validate_openai_batch_options(&OpenAiBatchOptions {
+            max_output_tokens: Some(0),
+            ..Default::default()
+        })
+        .is_err());
+        assert!(validate_openai_batch_options(&OpenAiBatchOptions {
+            advanced: serde_json::Map::from_iter([(
+                "model".to_string(),
+                serde_json::json!("override"),
+            )]),
+            ..Default::default()
+        })
+        .is_err());
+        assert!(validate_openai_batch_options(&OpenAiBatchOptions {
+            advanced: serde_json::Map::from_iter([(
+                "response_format".to_string(),
+                serde_json::json!({"type": "json_object"}),
+            )]),
+            ..Default::default()
+        })
+        .is_ok());
+    }
+
+    #[test]
+    fn rejects_unknown_prompt_columns() {
+        let mut draft = batch_draft();
+        draft.user_prompt = "{{missing}}".to_string();
+
+        assert!(validate_batch_export_draft(&draft, "gpt-test").is_err());
+    }
+
+    #[test]
+    fn validates_placeholders_against_materialized_columns_when_all_are_selected() {
+        let mut draft = batch_draft();
+        draft.selected_columns.clear();
+        draft.user_prompt = "{{missing}}".to_string();
+
+        assert!(validate_batch_export_draft(&draft, "gpt-test").is_ok());
+        assert!(validate_prompt_placeholders_against_columns(
+            &draft.system_prompt,
+            &draft.user_prompt,
+            ["text"]
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn plans_chunks_at_request_and_byte_limits() {
+        let fifty_thousand = (0..OPENAI_BATCH_MAX_REQUESTS)
+            .map(|index| (index as i64, 1))
+            .collect::<Vec<_>>();
+        let one_chunk = plan_openai_batch_chunk_sizes(
+            &fifty_thousand,
+            OPENAI_BATCH_MAX_REQUESTS,
+            OPENAI_BATCH_MAX_BYTES,
+        )
+        .unwrap();
+        assert_eq!(
+            one_chunk,
+            vec![OpenAiBatchChunk {
+                start: 0,
+                end: OPENAI_BATCH_MAX_REQUESTS,
+                byte_count: OPENAI_BATCH_MAX_REQUESTS as u64,
+            }]
+        );
+
+        let mut fifty_thousand_and_one = fifty_thousand;
+        fifty_thousand_and_one.push((OPENAI_BATCH_MAX_REQUESTS as i64, 1));
+        let two_chunks = plan_openai_batch_chunk_sizes(
+            &fifty_thousand_and_one,
+            OPENAI_BATCH_MAX_REQUESTS,
+            OPENAI_BATCH_MAX_BYTES,
+        )
+        .unwrap();
+        assert_eq!(two_chunks.len(), 2);
+        assert_eq!(two_chunks[0].end - two_chunks[0].start, 50_000);
+        assert_eq!(two_chunks[1].end - two_chunks[1].start, 1);
+
+        let size_chunks =
+            plan_openai_batch_chunk_sizes(&[(0, 6), (1, 4), (2, 1)], 50_000, 10).unwrap();
+        assert_eq!(
+            size_chunks,
+            vec![
+                OpenAiBatchChunk {
+                    start: 0,
+                    end: 2,
+                    byte_count: 10,
+                },
+                OpenAiBatchChunk {
+                    start: 2,
+                    end: 3,
+                    byte_count: 1,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn rejects_a_single_request_larger_than_a_batch_file() {
+        let error = plan_openai_batch_chunk_sizes(&[(42, 11)], 50_000, 10).unwrap_err();
+        assert!(error.to_string().contains("row 42"));
+        assert!(error.to_string().contains("200 MB"));
+    }
+
+    #[test]
+    fn preserves_single_path_and_numbers_multiple_parts() {
+        let destination = Path::new("reports").join("export.jsonl");
+        assert_eq!(
+            split_destination_paths(&destination.to_string_lossy(), 1).unwrap(),
+            vec![destination.clone()]
+        );
+        assert_eq!(
+            split_destination_paths(&destination.to_string_lossy(), 3).unwrap(),
+            vec![
+                Path::new("reports").join("export-part-0001-of-0003.jsonl"),
+                Path::new("reports").join("export-part-0002-of-0003.jsonl"),
+                Path::new("reports").join("export-part-0003-of-0003.jsonl"),
+            ]
+        );
+    }
+
+    #[test]
+    fn writes_global_request_ids_across_parts() {
+        let directory =
+            std::env::temp_dir().join(format!("data-explorer-batch-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&directory).unwrap();
+        let rows = vec![
+            input_row(0, serde_json::json!("first")),
+            input_row(1, serde_json::json!("second")),
+        ];
+        let chunks = plan_openai_batch_chunks(
+            &rows,
+            "gpt-test",
+            OpenAiBatchEndpoint::Responses,
+            "",
+            "{{text}}",
+            &OpenAiBatchOptions::default(),
+            1,
+            OPENAI_BATCH_MAX_BYTES,
+        )
+        .unwrap();
+        let paths = vec![
+            directory.join("part-1.jsonl"),
+            directory.join("part-2.jsonl"),
+        ];
+
+        let files = write_openai_batch_parts(
+            &paths,
+            &chunks,
+            &rows,
+            "gpt-test",
+            OpenAiBatchEndpoint::Responses,
+            "",
+            "{{text}}",
+            &OpenAiBatchOptions::default(),
+        )
+        .unwrap();
+
+        assert_eq!(files.len(), 2);
+        assert_eq!(
+            files.iter().map(|file| file.request_count).sum::<usize>(),
+            2
+        );
+        assert_eq!(
+            files.iter().map(|file| file.byte_count).sum::<u64>(),
+            chunks.iter().map(|chunk| chunk.byte_count).sum::<u64>()
+        );
+        let first: serde_json::Value =
+            serde_json::from_str(std::fs::read_to_string(&paths[0]).unwrap().trim()).unwrap();
+        let second: serde_json::Value =
+            serde_json::from_str(std::fs::read_to_string(&paths[1]).unwrap().trim()).unwrap();
+        assert_eq!(first["custom_id"], "row-0");
+        assert_eq!(second["custom_id"], "row-1");
+
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn removes_earlier_parts_when_a_later_write_fails() {
+        let directory =
+            std::env::temp_dir().join(format!("data-explorer-batch-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&directory).unwrap();
+        let rows = vec![
+            input_row(0, serde_json::json!("first")),
+            input_row(1, serde_json::json!("second")),
+        ];
+        let chunks = plan_openai_batch_chunks(
+            &rows,
+            "gpt-test",
+            OpenAiBatchEndpoint::Responses,
+            "",
+            "{{text}}",
+            &OpenAiBatchOptions::default(),
+            1,
+            OPENAI_BATCH_MAX_BYTES,
+        )
+        .unwrap();
+        let first_path = directory.join("part-1.jsonl");
+        let paths = vec![
+            first_path.clone(),
+            directory.join("missing").join("part-2.jsonl"),
+        ];
+
+        assert!(write_openai_batch_parts(
+            &paths,
+            &chunks,
+            &rows,
+            "gpt-test",
+            OpenAiBatchEndpoint::Responses,
+            "",
+            "{{text}}",
+            &OpenAiBatchOptions::default(),
+        )
+        .is_err());
+        assert!(!first_path.exists());
+
+        std::fs::remove_dir_all(directory).unwrap();
+    }
 }
