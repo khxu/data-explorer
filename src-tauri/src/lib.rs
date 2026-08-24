@@ -15,6 +15,7 @@ use commands::data_sources::deserialize_file_paths;
 use commands::data_sources::*;
 use commands::export::*;
 use commands::llm_runs::*;
+use commands::openai::*;
 use commands::projects::*;
 use commands::queries::*;
 use commands::tags::*;
@@ -100,6 +101,11 @@ pub fn run() {
             save_llm_experiment,
             delete_llm_experiment,
             preview_llm_input,
+            export_openai_batch_jsonl,
+            get_openai_credential_status,
+            set_openai_api_key,
+            delete_openai_api_key,
+            list_openai_models,
             list_llm_runs,
             get_llm_run_results,
             start_llm_run,

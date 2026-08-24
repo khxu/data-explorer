@@ -30,6 +30,13 @@ rusqlite = { version = "0.35", features = ["bundled"] }
 uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
 thiserror = "2"
+keyring = { version = "3", features = [
+    "apple-native",
+    "windows-native",
+    "linux-native-sync-persistent",
+    "crypto-rust",
+] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 
 [dev-dependencies]
 duckdb = "1.3"

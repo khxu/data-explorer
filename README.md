@@ -110,6 +110,8 @@ LLM Runs apply one or more Copilot models to each row from a data source or SQL 
 
 For every selected row and model, Data Explorer renders the prompts, sends the request through `copilot-sdk`, and stores the rendered prompts, output or error, status, latency, token usage when available, and source row snapshot in SQLite.
 
+As an alternative to processing rows immediately through Copilot, click **Export Batch JSONL** to generate an input file for OpenAI's Batch API from the current editor values. Choose the Responses API or Chat Completions API request shape, select or enter one OpenAI model ID, optionally configure generation settings, and select a `.jsonl` destination. The OpenAI model is configured separately because Copilot model IDs are not guaranteed to match OpenAI API model IDs.
+
 #### Prompt Templates
 
 Prompt templates use double-curly placeholders that match selected input columns:
@@ -129,6 +131,23 @@ Column chips appear after previewing input columns. Click a chip to insert that 
 Runs show progress as completed / total row-model tasks, plus failures. A run can be paused, canceled, resumed, or retried for failed items. If the app exits while a run is active, the next startup marks that run as paused so it can be resumed instead of silently losing state.
 
 The first implementation runs row-model tasks sequentially for predictable progress and cancellation behavior. The schema stores each result independently, so bounded concurrency can be added later.
+
+#### OpenAI Batch JSONL Export
+
+Batch export renders the current system and user prompts once for every input row and writes one request per JSONL line. It does not require saving the experiment first. Each request uses a zero-based `custom_id` such as `row-0` so downloaded Batch results can be correlated with the source row order, including when an export spans multiple files.
+
+Each exported file targets one OpenAI model and one endpoint:
+
+- `/v1/responses` writes the system prompt as `instructions` and the user prompt as `input`
+- `/v1/chat/completions` writes system and user messages
+
+You can enter any model ID manually without configuring a credential. To load model suggestions, save an OpenAI API key in the export dialog. Data Explorer stores the key in the operating system keychain, never in browser storage or the JSONL file, and uses it only to call OpenAI's model-list endpoint. The returned list does not identify Batch API compatibility, so fetched models are suggestions rather than a guarantee that OpenAI will accept the batch.
+
+Optional typed settings include temperature, top-p, and maximum output tokens. Maximum output tokens are written as `max_output_tokens` for the Responses API and `max_completion_tokens` for Chat Completions. An advanced JSON object can add other endpoint- or model-specific request fields. It cannot override the generated model, prompts/messages, streaming mode, or typed settings. The endpoint and all non-secret export settings are remembered as local dialog preferences.
+
+The exporter automatically starts a new file before a part would exceed OpenAI's limit of 50,000 requests or 200 MB per Batch input file. A one-file export keeps the exact selected filename. Multi-file exports use the selected path as a template: `export.jsonl` becomes names such as `export-part-0001-of-0003.jsonl`. Data Explorer validates every generated path before writing and refuses to overwrite existing files. If any part fails, it removes all parts created by that export attempt.
+
+Confirm that the entered model supports the Batch API before uploading the files. Data Explorer only generates local JSONL files; uploading them, creating and monitoring batches, and retrieving or importing results remain separate steps.
 
 #### Results and Export
 
