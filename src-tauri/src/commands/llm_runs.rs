@@ -10,12 +10,12 @@ use copilot_sdk::{
         AssistantMessageData, AssistantMessageDeltaData, AssistantUsageData, SessionErrorData,
         SessionModelChangeData, SessionStartData,
     },
-    Client, ClientOptions, SessionConfig, SystemMessageConfig,
+    Client, SessionConfig, SystemMessageConfig,
 };
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, State};
 
-use crate::commands::ai::AiTokenUsage;
+use crate::commands::ai::{build_copilot_client, AiTokenUsage};
 use crate::commands::data_sources::deserialize_file_paths;
 use crate::commands::export::validate_export_destination;
 use crate::db::Database;
@@ -456,7 +456,7 @@ async fn execute_run(
         "Starting Copilot row processing.",
     );
 
-    let client = Client::start(ClientOptions::default()).await?;
+    let client = build_copilot_client().await?;
     let result =
         execute_run_with_client(&app, &db, &client, &experiment, &run_id, rows, retry_failed).await;
     let stop_result = client
@@ -588,8 +588,9 @@ async fn run_copilot_prompt(
                 .with_content(system_content),
         );
     config.model = Some(model.to_string());
-    let session = client.create_session(config).await?;
-    let mut events = session.subscribe();
+    let prepared = client.prepare_session(config)?;
+    let mut events = prepared.subscribe();
+    let session = prepared.start().await?;
     let prompt = if user_prompt.trim().is_empty() {
         EMPTY_USER_PROMPT_FALLBACK.to_string()
     } else {
@@ -599,18 +600,24 @@ async fn run_copilot_prompt(
 
     let mut content = String::new();
     let mut saw_delta = false;
+    let mut turn_started = false;
     let mut token_usage = None;
     tokio::time::timeout(LLM_ROW_TIMEOUT, async {
         loop {
             match events.recv().await {
                 Ok(event) => match event.event_type.as_str() {
+                    "assistant.turn_start" => {
+                        turn_started = true;
+                    }
                     "assistant.message_delta" => {
+                        turn_started = true;
                         let delta: AssistantMessageDeltaData =
                             serde_json::from_value(event.data.clone())?;
                         saw_delta = true;
                         content.push_str(&delta.delta_content);
                     }
                     "assistant.message" => {
+                        turn_started = true;
                         let message: AssistantMessageData =
                             serde_json::from_value(event.data.clone())?;
                         if !saw_delta {
@@ -618,6 +625,7 @@ async fn run_copilot_prompt(
                         }
                     }
                     "assistant.usage" => {
+                        turn_started = true;
                         let usage: AssistantUsageData = serde_json::from_value(event.data.clone())?;
                         token_usage = Some(AiTokenUsage {
                             input_tokens: usage.input_tokens,
@@ -639,7 +647,8 @@ async fn run_copilot_prompt(
                     "session.model_change" => {
                         let _: SessionModelChangeData = serde_json::from_value(event.data.clone())?;
                     }
-                    "session.idle" => break,
+                    "session.idle" if turn_started => break,
+                    "session.idle" => {}
                     "session.error" => {
                         let err: SessionErrorData = serde_json::from_value(event.data.clone())?;
                         return Err(AppError::General(format!(
