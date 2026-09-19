@@ -328,11 +328,37 @@ export function AppProvider({ children }: { children: ReactNode }) {
         ? activeProject.tag_filter
         : undefined;
       const sources = await listDataSources(tagIds);
-      const schemas = await Promise.all(
-        sources.map((source) => getDataSourceSchema(source.id))
-      );
       setDataSources(sources);
-      setDataSourceSchemas(schemas);
+      const schemaResults = await Promise.all(
+        sources.map(async (source) => {
+          if (!source.available) {
+            return {
+              source,
+              schema: null,
+              error: source.availability_error ?? "Data source is unavailable.",
+            };
+          }
+          try {
+            return {
+              source,
+              schema: await getDataSourceSchema(source.id),
+              error: null,
+            };
+          } catch (error) {
+            return { source, schema: null, error: String(error) };
+          }
+        })
+      );
+      setDataSourceSchemas(
+        schemaResults.flatMap((result) => (result.schema ? [result.schema] : []))
+      );
+      setDataSources(
+        schemaResults.map(({ source, error }) =>
+          error
+            ? { ...source, available: false, availability_error: error }
+            : { ...source, available: true, availability_error: null }
+        )
+      );
     } catch (e) {
       setError(String(e));
     }

@@ -38,6 +38,7 @@ export function Sidebar() {
     refreshProjects,
     setLastSql,
     clearQueryTabProject,
+    setError,
   } = useAppState();
 
   const [showRegister, setShowRegister] = useState(false);
@@ -49,9 +50,13 @@ export function Sidebar() {
 
   async function handleConfirmRemoveSource() {
     if (!removingDataSource) return;
-    await removeDataSource(removingDataSource.id);
-    await refreshDataSources();
-    setRemovingDataSource(null);
+    try {
+      await removeDataSource(removingDataSource.id);
+      await refreshDataSources();
+      setRemovingDataSource(null);
+    } catch (e) {
+      setError(String(e));
+    }
   }
 
   async function handleRefreshSource(id: string) {
@@ -59,7 +64,8 @@ export function Sidebar() {
       await apiRefreshDataSource(id);
       await refreshDataSources();
     } catch (e) {
-      console.error("Failed to refresh data source:", e);
+      setError(String(e));
+      await refreshDataSources();
     }
   }
 
@@ -68,7 +74,8 @@ export function Sidebar() {
       await apiRefreshAllDataSources();
       await refreshDataSources();
     } catch (e) {
-      console.error("Failed to refresh all data sources:", e);
+      setError(String(e));
+      await refreshDataSources();
     }
   }
 
@@ -210,16 +217,23 @@ export function Sidebar() {
         <div className="overflow-y-auto h-full">
           <div className="space-y-0.5">
             {dataSources.map((ds) => (
-              <div key={ds.id} className="flex items-center group">
+              <div
+                key={ds.id}
+                className={`flex items-center group ${!ds.available ? "opacity-70" : ""}`}
+              >
                 <button
-                  className="flex-1 min-w-0 text-left text-sm px-2 py-1 rounded hover:bg-accent/50 truncate"
-                  onClick={() => handleSourceClick(ds.name)}
-                  title={ds.file_paths.join("\n")}
+                  className="flex-1 min-w-0 text-left text-sm px-2 py-1 rounded hover:bg-accent/50 truncate disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                  onClick={() => ds.available && handleSourceClick(ds.name)}
+                  disabled={!ds.available}
+                  title={ds.available ? ds.file_paths.join("\n") : ds.availability_error ?? "Data source unavailable"}
                 >
                   <span className="mr-1">
                     {FORMAT_ICONS[ds.file_format] ?? "📁"}
                   </span>
                   {ds.name}
+                  {!ds.available && (
+                    <span className="ml-1 text-[11px] text-amber-600">(unavailable)</span>
+                  )}
                 </button>
                 <div className="flex-shrink-0 flex items-center gap-0.5">
                   <Button
@@ -227,7 +241,7 @@ export function Sidebar() {
                     size="sm"
                     className="h-5 w-5 p-0 text-muted-foreground"
                     onClick={() => handleRefreshSource(ds.id)}
-                    title="Refresh data from disk"
+                    title={ds.available ? "Refresh data from disk" : "Retry after restoring the missing file"}
                   >
                     ↻
                   </Button>

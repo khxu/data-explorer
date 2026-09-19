@@ -50,6 +50,8 @@ To **unregister** a data source, hover over it in the sidebar and click the **�
 
 You can also **edit tags** on an existing data source by clicking the **🏷** button, or **refresh** it from disk with the **↻** button.
 
+If a registered file is deleted or moved outside Data Explorer, the source remains visible but is marked **unavailable**. Other sources continue to load and remain queryable. Restore all files in a multi-file source and click **↻** to make it available again, or click **✕** to unregister the stale source without deleting anything from disk.
+
 ### 2. Query Your Data
 
 1. Click on the **Query** tab (or click any data source in the sidebar to auto-populate a `SELECT * FROM table LIMIT 100` query)

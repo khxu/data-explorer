@@ -11,6 +11,8 @@ export interface DataSource {
   created_at: string;
   updated_at: string;
   tags: string[];
+  available: boolean;
+  availability_error: string | null;
 }
 
 export interface DataSourceColumn {

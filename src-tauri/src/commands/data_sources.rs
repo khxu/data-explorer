@@ -15,12 +15,23 @@ pub struct DataSource {
     pub created_at: String,
     pub updated_at: String,
     pub tags: Vec<String>, // tag IDs
+    pub available: bool,
+    pub availability_error: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DataSourceColumn {
     pub name: String,
     pub data_type: String,
+}
+
+fn source_availability(file_paths: &[String]) -> (bool, Option<String>) {
+    for file_path in file_paths {
+        if !std::path::Path::new(file_path).is_file() {
+            return (false, Some(format!("File not found: {}", file_path)));
+        }
+    }
+    (true, None)
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -107,6 +118,8 @@ pub fn register_data_source(
         created_at: chrono::Utc::now().to_rfc3339(),
         updated_at: chrono::Utc::now().to_rfc3339(),
         tags: vec![],
+        available: true,
+        availability_error: None,
     })
 }
 
@@ -168,7 +181,7 @@ pub fn refresh_all_data_sources(
     drop(conn);
     for (name, path, paths, format) in sources {
         let file_paths = deserialize_file_paths(path, paths)?;
-        duckdb.register_source(&name, &file_paths, &format)?;
+        let _ = duckdb.register_source(&name, &file_paths, &format);
     }
     Ok(())
 }
@@ -188,7 +201,7 @@ pub fn get_data_source_schema(
         )?;
     drop(conn);
     let file_paths = deserialize_file_paths(file_path, file_paths)?;
-
+    duckdb.register_source(&name, &file_paths, &file_format)?;
     let columns = duckdb
         .columns_for_source(&file_paths, &file_format)?
         .into_iter()
@@ -247,6 +260,8 @@ pub fn list_data_sources(
                 created_at: row.get(5)?,
                 updated_at: row.get(6)?,
                 tags: vec![],
+                available: false,
+                availability_error: None,
             })
         })?;
         rows.collect::<Result<Vec<_>, _>>()?
@@ -270,6 +285,8 @@ pub fn list_data_sources(
                 created_at: row.get(5)?,
                 updated_at: row.get(6)?,
                 tags: vec![],
+                available: false,
+                availability_error: None,
             })
         })?;
         rows.collect::<Result<Vec<_>, _>>()?
@@ -277,6 +294,9 @@ pub fn list_data_sources(
 
     // Populate tags for each source
     for source in &mut sources {
+        let availability = source_availability(&source.file_paths);
+        source.available = availability.0;
+        source.availability_error = availability.1;
         let mut stmt =
             conn.prepare("SELECT tag_id FROM data_source_tags WHERE data_source_id = ?1")?;
         let tag_rows =
