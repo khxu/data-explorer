@@ -13,7 +13,14 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useAppState } from "@/hooks/useAppState";
-import { removeDataSource, deleteProject, refreshDataSource as apiRefreshDataSource, refreshAllDataSources as apiRefreshAllDataSources, type DataSource, type Project } from "@/lib/api";
+import {
+  removeDataSource,
+  deleteProject,
+  refreshDataSource as apiRefreshDataSource,
+  refreshAllDataSources as apiRefreshAllDataSources,
+  type DataSource,
+  type Project,
+} from "@/lib/api";
 import { RegisterDataSourceDialog } from "./RegisterDataSourceDialog";
 import { TagManagerDialog } from "./TagManagerDialog";
 import { ProjectDialog } from "./ProjectDialog";
@@ -45,8 +52,11 @@ export function Sidebar() {
   const [showTagManager, setShowTagManager] = useState(false);
   const [showProjectDialog, setShowProjectDialog] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
-  const [editingDataSource, setEditingDataSource] = useState<DataSource | null>(null);
-  const [removingDataSource, setRemovingDataSource] = useState<DataSource | null>(null);
+  const [editingDataSource, setEditingDataSource] = useState<DataSource | null>(
+    null,
+  );
+  const [removingDataSource, setRemovingDataSource] =
+    useState<DataSource | null>(null);
 
   async function handleConfirmRemoveSource() {
     if (!removingDataSource) return;
@@ -122,7 +132,9 @@ export function Sidebar() {
             <div key={p.id} className="flex items-center group">
               <button
                 className={`flex-1 text-left text-sm px-2 py-1 rounded truncate ${
-                  activeProject?.id === p.id ? "bg-accent" : "hover:bg-accent/50"
+                  activeProject?.id === p.id
+                    ? "bg-accent"
+                    : "hover:bg-accent/50"
                 }`}
                 onClick={() => setActiveProject(p)}
               >
@@ -225,14 +237,20 @@ export function Sidebar() {
                   className="flex-1 min-w-0 text-left text-sm px-2 py-1 rounded hover:bg-accent/50 truncate disabled:cursor-not-allowed disabled:hover:bg-transparent"
                   onClick={() => ds.available && handleSourceClick(ds.name)}
                   disabled={!ds.available}
-                  title={ds.available ? ds.file_paths.join("\n") : ds.availability_error ?? "Data source unavailable"}
+                  title={
+                    ds.available
+                      ? ds.file_paths.join("\n")
+                      : (ds.availability_error ?? "Data source unavailable")
+                  }
                 >
                   <span className="mr-1">
                     {FORMAT_ICONS[ds.file_format] ?? "📁"}
                   </span>
                   {ds.name}
                   {!ds.available && (
-                    <span className="ml-1 text-[11px] text-amber-600">(unavailable)</span>
+                    <span className="ml-1 text-[11px] text-amber-600">
+                      (unavailable)
+                    </span>
                   )}
                 </button>
                 <div className="flex-shrink-0 flex items-center gap-0.5">
@@ -241,7 +259,11 @@ export function Sidebar() {
                     size="sm"
                     className="h-5 w-5 p-0 text-muted-foreground"
                     onClick={() => handleRefreshSource(ds.id)}
-                    title={ds.available ? "Refresh data from disk" : "Retry after restoring the missing file"}
+                    title={
+                      ds.available
+                        ? "Refresh data from disk"
+                        : "Retry after restoring the missing file"
+                    }
                   >
                     ↻
                   </Button>
@@ -297,15 +319,20 @@ export function Sidebar() {
         onClose={() => setEditingDataSource(null)}
         dataSource={editingDataSource}
       />
-      <AlertDialog open={!!removingDataSource} onOpenChange={(open) => { if (!open) setRemovingDataSource(null); }}>
+      <AlertDialog
+        open={!!removingDataSource}
+        onOpenChange={(open) => {
+          if (!open) setRemovingDataSource(null);
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Unregister data source</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to unregister{" "}
               <span className="font-semibold">{removingDataSource?.name}</span>?
-              This removes it from Data Explorer but does not delete the original
-              file on disk.
+              This removes it from Data Explorer but does not delete the
+              original file on disk.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

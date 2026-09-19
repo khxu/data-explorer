@@ -3,7 +3,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAppState } from "@/hooks/useAppState";
-import { clearAiAssistHistory, clearQueryHistory, type AiTokenUsage } from "@/lib/api";
+import {
+  clearAiAssistHistory,
+  clearQueryHistory,
+  type AiTokenUsage,
+} from "@/lib/api";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -30,7 +34,8 @@ export function HistoryPanel() {
 
   async function handleClear() {
     try {
-      const clearFn = clearTarget === "query" ? clearQueryHistory : clearAiAssistHistory;
+      const clearFn =
+        clearTarget === "query" ? clearQueryHistory : clearAiAssistHistory;
       if (clearMode === "all") {
         await clearFn();
       } else if (beforeDate) {
@@ -86,7 +91,9 @@ export function HistoryPanel() {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <Badge
-                        variant={entry.status === "success" ? "default" : "destructive"}
+                        variant={
+                          entry.status === "success" ? "default" : "destructive"
+                        }
                         className="text-xs"
                       >
                         {entry.status}
@@ -123,7 +130,9 @@ export function HistoryPanel() {
                     {entry.sql_text}
                   </pre>
                   {entry.error_message && (
-                    <p className="text-xs text-destructive">{entry.error_message}</p>
+                    <p className="text-xs text-destructive">
+                      {entry.error_message}
+                    </p>
                   )}
                 </div>
               ))}
@@ -162,7 +171,11 @@ export function HistoryPanel() {
                           AI Assist
                         </Badge>
                         <span className="ml-2 text-xs text-muted-foreground">
-                          {formatAiModel(entry.model_name, entry.model_used, entry.requested_model)}
+                          {formatAiModel(
+                            entry.model_name,
+                            entry.model_used,
+                            entry.requested_model,
+                          )}
                         </span>
                       </div>
                       <div className="flex items-center gap-1">
@@ -183,11 +196,17 @@ export function HistoryPanel() {
                       </div>
                     </div>
                     <div className="space-y-1">
-                      <p className="text-xs font-medium text-muted-foreground">Prompt</p>
-                      <p className="text-sm whitespace-pre-wrap">{entry.prompt_text}</p>
+                      <p className="text-xs font-medium text-muted-foreground">
+                        Prompt
+                      </p>
+                      <p className="text-sm whitespace-pre-wrap">
+                        {entry.prompt_text}
+                      </p>
                     </div>
                     <div className="space-y-1">
-                      <p className="text-xs font-medium text-muted-foreground">Generated SQL</p>
+                      <p className="text-xs font-medium text-muted-foreground">
+                        Generated SQL
+                      </p>
                       <pre className="text-xs font-mono bg-muted/50 p-2 rounded overflow-x-auto whitespace-pre-wrap">
                         {entry.generated_sql}
                       </pre>
@@ -196,7 +215,10 @@ export function HistoryPanel() {
                       <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
                         {formatTokenUsageRows(usage).map(([label, value]) => (
                           <span key={label}>
-                            {label}: <span className="font-mono text-foreground">{value}</span>
+                            {label}:{" "}
+                            <span className="font-mono text-foreground">
+                              {value}
+                            </span>
                           </span>
                         ))}
                       </div>
@@ -218,7 +240,9 @@ export function HistoryPanel() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {clearMode === "all" ? "Clear All History" : "Clear History Before Date"}
+              {clearMode === "all"
+                ? "Clear All History"
+                : "Clear History Before Date"}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {clearMode === "all"
@@ -261,7 +285,12 @@ function HistoryActions({
 }) {
   return (
     <div className="flex justify-end gap-1">
-      <Button variant="ghost" size="sm" className="text-xs" onClick={onClearBefore}>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="text-xs"
+        onClick={onClearBefore}
+      >
         Clear before…
       </Button>
       <Button
@@ -288,9 +317,10 @@ function parseTokenUsage(value: string | null): AiTokenUsage | null {
 function formatAiModel(
   modelName: string | null,
   modelUsed: string | null,
-  requestedModel: string | null
+  requestedModel: string | null,
 ) {
-  if (modelName && modelUsed && modelName !== modelUsed) return `${modelName} (${modelUsed})`;
+  if (modelName && modelUsed && modelName !== modelUsed)
+    return `${modelName} (${modelUsed})`;
   return modelName ?? modelUsed ?? requestedModel ?? "Copilot default model";
 }
 

@@ -104,11 +104,15 @@ function loadOptions(): PersistedOptions {
     if (!value) return DEFAULT_OPTIONS;
     const parsed = JSON.parse(value) as Partial<PersistedOptions>;
     return {
-      temperature: typeof parsed.temperature === "string" ? parsed.temperature : "",
+      temperature:
+        typeof parsed.temperature === "string" ? parsed.temperature : "",
       topP: typeof parsed.topP === "string" ? parsed.topP : "",
       maxOutputTokens:
-        typeof parsed.maxOutputTokens === "string" ? parsed.maxOutputTokens : "",
-      advancedJson: typeof parsed.advancedJson === "string" ? parsed.advancedJson : "",
+        typeof parsed.maxOutputTokens === "string"
+          ? parsed.maxOutputTokens
+          : "",
+      advancedJson:
+        typeof parsed.advancedJson === "string" ? parsed.advancedJson : "",
     };
   } catch (error) {
     console.warn("Unable to load the OpenAI Batch options preference", error);
@@ -135,14 +139,17 @@ export function OpenAiBatchExportDialog({ open, onClose, draft }: Props) {
 
   const optionsResult = useMemo(
     () => parseBatchOptions(persistedOptions),
-    [persistedOptions]
+    [persistedOptions],
   );
 
   useEffect(() => {
     try {
       window.localStorage.setItem(ENDPOINT_STORAGE_KEY, endpoint);
     } catch (storageError) {
-      console.warn("Unable to save the OpenAI Batch endpoint preference", storageError);
+      console.warn(
+        "Unable to save the OpenAI Batch endpoint preference",
+        storageError,
+      );
     }
   }, [endpoint]);
 
@@ -150,15 +157,24 @@ export function OpenAiBatchExportDialog({ open, onClose, draft }: Props) {
     try {
       window.localStorage.setItem(MODEL_STORAGE_KEY, model);
     } catch (storageError) {
-      console.warn("Unable to save the OpenAI Batch model preference", storageError);
+      console.warn(
+        "Unable to save the OpenAI Batch model preference",
+        storageError,
+      );
     }
   }, [model]);
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(OPTIONS_STORAGE_KEY, JSON.stringify(persistedOptions));
+      window.localStorage.setItem(
+        OPTIONS_STORAGE_KEY,
+        JSON.stringify(persistedOptions),
+      );
     } catch (storageError) {
-      console.warn("Unable to save the OpenAI Batch options preference", storageError);
+      console.warn(
+        "Unable to save the OpenAI Batch options preference",
+        storageError,
+      );
     }
   }, [persistedOptions]);
 
@@ -249,7 +265,7 @@ export function OpenAiBatchExportDialog({ open, onClose, draft }: Props) {
         model.trim(),
         endpoint,
         optionsResult.options,
-        destinationPath
+        destinationPath,
       );
       setSuccess(formatExportSuccess(result));
     } catch (exportError) {
@@ -260,7 +276,8 @@ export function OpenAiBatchExportDialog({ open, onClose, draft }: Props) {
   }
 
   const customModel = modelSearch.trim();
-  const showCustomModel = customModel.length > 0 && !models.includes(customModel);
+  const showCustomModel =
+    customModel.length > 0 && !models.includes(customModel);
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
@@ -270,8 +287,8 @@ export function OpenAiBatchExportDialog({ open, onClose, draft }: Props) {
         </DialogHeader>
         <div className="space-y-5">
           <p className="text-sm text-muted-foreground">
-            Generates one Batch API request per input row and automatically splits files at
-            50,000 requests or 200 MB.
+            Generates one Batch API request per input row and automatically
+            splits files at 50,000 requests or 200 MB.
           </p>
 
           <div className="space-y-2 rounded-lg border p-3">
@@ -302,17 +319,25 @@ export function OpenAiBatchExportDialog({ open, onClose, draft }: Props) {
                 autoComplete="off"
                 value={apiKey}
                 onChange={(event) => setApiKey(event.target.value)}
-                placeholder={credentialConfigured ? "Enter a replacement key" : "sk-..."}
+                placeholder={
+                  credentialConfigured ? "Enter a replacement key" : "sk-..."
+                }
               />
               <Button
                 variant="outline"
                 onClick={saveApiKey}
                 disabled={!apiKey.trim() || credentialLoading}
               >
-                {credentialLoading ? "Saving..." : credentialConfigured ? "Replace" : "Save"}
+                {credentialLoading
+                  ? "Saving..."
+                  : credentialConfigured
+                    ? "Replace"
+                    : "Save"}
               </Button>
             </div>
-            {modelsError && <p className="text-xs text-destructive">{modelsError}</p>}
+            {modelsError && (
+              <p className="text-xs text-destructive">{modelsError}</p>
+            )}
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
@@ -320,13 +345,17 @@ export function OpenAiBatchExportDialog({ open, onClose, draft }: Props) {
               <Label>Endpoint</Label>
               <Select
                 value={endpoint}
-                onValueChange={(value) => setEndpoint(value as OpenAiBatchEndpoint)}
+                onValueChange={(value) =>
+                  setEndpoint(value as OpenAiBatchEndpoint)
+                }
               >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="responses">Responses API (/v1/responses)</SelectItem>
+                  <SelectItem value="responses">
+                    Responses API (/v1/responses)
+                  </SelectItem>
                   <SelectItem value="chat_completions">
                     Chat Completions (/v1/chat/completions)
                   </SelectItem>
@@ -361,11 +390,16 @@ export function OpenAiBatchExportDialog({ open, onClose, draft }: Props) {
                     aria-expanded={modelPickerOpen}
                     className="w-full justify-between font-normal"
                   >
-                    <span className="truncate">{model || "Choose or enter a model ID"}</span>
+                    <span className="truncate">
+                      {model || "Choose or enter a model ID"}
+                    </span>
                     <ChevronDownIcon className="opacity-50" />
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent align="start" className="w-[var(--radix-popover-trigger-width)] p-0">
+                <PopoverContent
+                  align="start"
+                  className="w-[var(--radix-popover-trigger-width)] p-0"
+                >
                   <Command>
                     <CommandInput
                       value={modelSearch}
@@ -374,7 +408,9 @@ export function OpenAiBatchExportDialog({ open, onClose, draft }: Props) {
                     />
                     <CommandList>
                       <CommandEmpty>
-                        {modelsLoading ? "Loading models..." : "Type a custom model ID."}
+                        {modelsLoading
+                          ? "Loading models..."
+                          : "Type a custom model ID."}
                       </CommandEmpty>
                       {showCustomModel && (
                         <CommandGroup heading="Custom">
@@ -411,7 +447,8 @@ export function OpenAiBatchExportDialog({ open, onClose, draft }: Props) {
                 </PopoverContent>
               </Popover>
               <p className="text-xs text-muted-foreground">
-                OpenAI does not identify Batch-compatible models; custom IDs are allowed.
+                OpenAI does not identify Batch-compatible models; custom IDs are
+                allowed.
               </p>
             </div>
           </div>
@@ -461,7 +498,9 @@ export function OpenAiBatchExportDialog({ open, onClose, draft }: Props) {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="openai-max-output-tokens">Max output tokens</Label>
+                <Label htmlFor="openai-max-output-tokens">
+                  Max output tokens
+                </Label>
                 <Input
                   id="openai-max-output-tokens"
                   type="number"
@@ -477,12 +516,16 @@ export function OpenAiBatchExportDialog({ open, onClose, draft }: Props) {
                   placeholder="Optional"
                 />
                 <p className="text-xs text-muted-foreground">
-                  {endpoint === "responses" ? "max_output_tokens" : "max_completion_tokens"}
+                  {endpoint === "responses"
+                    ? "max_output_tokens"
+                    : "max_completion_tokens"}
                 </p>
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="openai-advanced-json">Advanced request fields (JSON object)</Label>
+              <Label htmlFor="openai-advanced-json">
+                Advanced request fields (JSON object)
+              </Label>
               <Textarea
                 id="openai-advanced-json"
                 value={persistedOptions.advancedJson}
@@ -497,10 +540,13 @@ export function OpenAiBatchExportDialog({ open, onClose, draft }: Props) {
                 aria-invalid={Boolean(optionsResult.error)}
               />
               <p className="text-xs text-muted-foreground">
-                Add endpoint-specific fields. Generated prompts, model, streaming, and typed settings cannot be overridden.
+                Add endpoint-specific fields. Generated prompts, model,
+                streaming, and typed settings cannot be overridden.
               </p>
               {optionsResult.error && (
-                <p className="text-xs text-destructive">{optionsResult.error}</p>
+                <p className="text-xs text-destructive">
+                  {optionsResult.error}
+                </p>
               )}
             </div>
           </div>
@@ -543,18 +589,24 @@ export function OpenAiBatchExportDialog({ open, onClose, draft }: Props) {
   );
 }
 
-function parseBatchOptions(
-  options: PersistedOptions
-): { options: OpenAiBatchOptions | null; error: string | null } {
+function parseBatchOptions(options: PersistedOptions): {
+  options: OpenAiBatchOptions | null;
+  error: string | null;
+} {
   try {
-    const temperature = parseOptionalNumber(options.temperature, "Temperature", 0, 2);
+    const temperature = parseOptionalNumber(
+      options.temperature,
+      "Temperature",
+      0,
+      2,
+    );
     const topP = parseOptionalNumber(options.topP, "Top-p", 0, 1);
     const maxOutputTokens = parseOptionalNumber(
       options.maxOutputTokens,
       "Maximum output tokens",
       1,
       Number.MAX_SAFE_INTEGER,
-      true
+      true,
     );
     let advanced: Record<string, unknown> = {};
     if (options.advancedJson.trim()) {
@@ -564,10 +616,12 @@ function parseBatchOptions(
       }
       advanced = parsed as Record<string, unknown>;
       const reservedKey = Object.keys(advanced).find((key) =>
-        RESERVED_ADVANCED_KEYS.has(key)
+        RESERVED_ADVANCED_KEYS.has(key),
       );
       if (reservedKey) {
-        throw new Error(`Advanced request fields cannot set reserved field "${reservedKey}".`);
+        throw new Error(
+          `Advanced request fields cannot set reserved field "${reservedKey}".`,
+        );
       }
     }
     return {
@@ -584,7 +638,7 @@ function parseOptionalNumber(
   label: string,
   min: number,
   max: number,
-  integer = false
+  integer = false,
 ) {
   if (!rawValue.trim()) return null;
   const value = Number(rawValue);
@@ -598,7 +652,12 @@ function parseOptionalNumber(
 }
 
 function safeFilename(value: string) {
-  return value.trim().replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "llm-run";
+  return (
+    value
+      .trim()
+      .replace(/[^A-Za-z0-9._-]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "llm-run"
+  );
 }
 
 function formatBytes(value: number) {

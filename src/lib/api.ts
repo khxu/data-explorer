@@ -28,7 +28,7 @@ export interface DataSourceSchema {
 
 export async function registerDataSource(
   name: string,
-  filePaths: string[]
+  filePaths: string[],
 ): Promise<DataSource> {
   return invoke("register_data_source", { name, filePaths });
 }
@@ -46,13 +46,13 @@ export async function refreshAllDataSources(): Promise<void> {
 }
 
 export async function listDataSources(
-  tagIds?: string[]
+  tagIds?: string[],
 ): Promise<DataSource[]> {
   return invoke("list_data_sources", { tagIds: tagIds ?? null });
 }
 
 export async function getDataSourceSchema(
-  id: string
+  id: string,
 ): Promise<DataSourceSchema> {
   return invoke("get_data_source_schema", { id });
 }
@@ -66,10 +66,7 @@ export interface Tag {
   created_at: string;
 }
 
-export async function createTag(
-  name: string,
-  color?: string
-): Promise<Tag> {
+export async function createTag(name: string, color?: string): Promise<Tag> {
   return invoke("create_tag", { name, color: color ?? null });
 }
 
@@ -83,14 +80,14 @@ export async function listTags(): Promise<Tag[]> {
 
 export async function assignTags(
   dataSourceId: string,
-  tagIds: string[]
+  tagIds: string[],
 ): Promise<void> {
   return invoke("assign_tags", { dataSourceId, tagIds });
 }
 
 export async function removeTags(
   dataSourceId: string,
-  tagIds: string[]
+  tagIds: string[],
 ): Promise<void> {
   return invoke("remove_tags", { dataSourceId, tagIds });
 }
@@ -109,7 +106,7 @@ export interface Project {
 export async function createProject(
   name: string,
   description: string | null,
-  tagFilter: string[]
+  tagFilter: string[],
 ): Promise<Project> {
   return invoke("create_project", { name, description, tagFilter });
 }
@@ -118,7 +115,7 @@ export async function updateProject(
   id: string,
   name: string,
   description: string | null,
-  tagFilter: string[]
+  tagFilter: string[],
 ): Promise<void> {
   return invoke("update_project", { id, name, description, tagFilter });
 }
@@ -161,7 +158,9 @@ export async function cancelQuery(): Promise<boolean> {
   return invoke("cancel_query");
 }
 
-export async function releaseQueryResult(exportTableName: string): Promise<boolean> {
+export async function releaseQueryResult(
+  exportTableName: string,
+): Promise<boolean> {
   return invoke("release_query_result", { exportTableName });
 }
 
@@ -171,7 +170,7 @@ export async function getStandaloneSql(sql: string): Promise<string> {
 
 export async function getQueryHistory(
   limit?: number,
-  offset?: number
+  offset?: number,
 ): Promise<QueryHistoryEntry[]> {
   return invoke("get_query_history", {
     limit: limit ?? 50,
@@ -242,7 +241,7 @@ export async function draftSqlQuery(
   model: string | null,
   modelName: string | null,
   currentSql: string,
-  dataSourceIds: string[]
+  dataSourceIds: string[],
 ): Promise<AiDraftResponse> {
   return invoke("draft_sql_query", {
     requestId,
@@ -256,7 +255,7 @@ export async function draftSqlQuery(
 
 export async function getAiAssistHistory(
   limit?: number,
-  offset?: number
+  offset?: number,
 ): Promise<AiAssistHistoryEntry[]> {
   return invoke("get_ai_assist_history", {
     limit: limit ?? 50,
@@ -294,7 +293,7 @@ export async function exportResults(
   sql: string,
   format: string,
   destinationPath: string,
-  resultTableName?: string | null
+  resultTableName?: string | null,
 ): Promise<string> {
   return invoke("export_results", {
     sql,
@@ -411,7 +410,9 @@ export async function getOpenAiCredentialStatus(): Promise<OpenAiCredentialStatu
   return invoke("get_openai_credential_status");
 }
 
-export async function setOpenAiApiKey(apiKey: string): Promise<OpenAiCredentialStatus> {
+export async function setOpenAiApiKey(
+  apiKey: string,
+): Promise<OpenAiCredentialStatus> {
   return invoke("set_openai_api_key", { apiKey });
 }
 
@@ -428,7 +429,7 @@ export async function listLlmExperiments(): Promise<LlmExperiment[]> {
 }
 
 export async function saveLlmExperiment(
-  draft: LlmExperimentDraft
+  draft: LlmExperimentDraft,
 ): Promise<LlmExperiment> {
   return invoke("save_llm_experiment", { draft });
 }
@@ -442,7 +443,7 @@ export async function previewLlmInput(
   dataSourceId: string | null,
   sqlText: string | null,
   selectedColumns: string[],
-  limit = 25
+  limit = 25,
 ): Promise<LlmInputPreview> {
   return invoke("preview_llm_input", {
     inputSourceType,
@@ -458,7 +459,7 @@ export async function exportOpenAiBatchJsonl(
   model: string,
   endpoint: OpenAiBatchEndpoint,
   options: OpenAiBatchOptions,
-  destinationPath: string
+  destinationPath: string,
 ): Promise<OpenAiBatchExportResult> {
   return invoke("export_openai_batch_jsonl", {
     draft,

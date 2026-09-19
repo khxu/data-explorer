@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as Plot from "@observablehq/plot";
 import { javascript } from "@codemirror/lang-javascript";
-import { bracketMatching, defaultHighlightStyle, syntaxHighlighting } from "@codemirror/language";
+import {
+  bracketMatching,
+  defaultHighlightStyle,
+  syntaxHighlighting,
+} from "@codemirror/language";
 import { Compartment, EditorState } from "@codemirror/state";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { EditorView, keymap, lineNumbers } from "@codemirror/view";
@@ -13,7 +17,12 @@ import {
   type CompletionContext,
   completionKeymap,
 } from "@codemirror/autocomplete";
-import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
+import {
+  defaultKeymap,
+  history,
+  historyKeymap,
+  indentWithTab,
+} from "@codemirror/commands";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -53,7 +62,8 @@ type PlotAxisOptions = {
 const NONE_VALUE = "__none__";
 const DEFAULT_HEIGHT = 420;
 const AXIS_INFERENCE_SAMPLE_SIZE = 100;
-const CUSTOM_PLOT_EDITOR_HEIGHT_STORAGE_KEY = "data-explorer.customPlotEditorHeight";
+const CUSTOM_PLOT_EDITOR_HEIGHT_STORAGE_KEY =
+  "data-explorer.customPlotEditorHeight";
 const CUSTOM_PLOT_EDITOR_HEIGHT_BOUNDS = { min: 120, max: 600 };
 const DEFAULT_CUSTOM_PLOT_EDITOR_HEIGHT = 180;
 const CUSTOM_PLOT_TOP_LEVEL_COMPLETIONS: Completion[] = [
@@ -68,7 +78,10 @@ const CUSTOM_PLOT_NAMESPACE_COMPLETIONS: Completion[] = Object.keys(Plot)
   .sort()
   .map((key) => ({
     label: key,
-    type: typeof Plot[key as keyof typeof Plot] === "function" ? "function" : "property",
+    type:
+      typeof Plot[key as keyof typeof Plot] === "function"
+        ? "function"
+        : "property",
     detail: "Plot",
   }));
 const AXIS_SCALE_OPTIONS: { value: PlotAxisScaleSelection; label: string }[] = [
@@ -84,7 +97,8 @@ const AXIS_SCALE_OPTIONS: { value: PlotAxisScaleSelection; label: string }[] = [
   { value: "band", label: "Band" },
 ];
 const PLOT_SCALE_TYPE_COMPLETIONS: Completion[] = AXIS_SCALE_OPTIONS.filter(
-  (option): option is { value: PlotAxisType; label: string } => option.value !== "auto"
+  (option): option is { value: PlotAxisType; label: string } =>
+    option.value !== "auto",
 ).map((option) => ({
   label: option.value,
   type: "constant",
@@ -99,8 +113,9 @@ export function QueryResultsChart({ result }: Props) {
   const [chartType, setChartType] = useState<ChartType>("line");
   const defaults = useMemo(() => getDefaultColumns(result), [result]);
   const resultSignature = useMemo(
-    () => `${result.columns.join("\u001f")}\u001e${result.column_types.join("\u001f")}`,
-    [result.columns, result.column_types]
+    () =>
+      `${result.columns.join("\u001f")}\u001e${result.column_types.join("\u001f")}`,
+    [result.columns, result.column_types],
   );
   const [xColumn, setXColumn] = useState(defaults.xColumn);
   const [yColumn, setYColumn] = useState(defaults.yColumn);
@@ -109,7 +124,7 @@ export function QueryResultsChart({ result }: Props) {
   const [colorColumn, setColorColumn] = useState<string | null>(null);
   const [facetColumn, setFacetColumn] = useState<string | null>(null);
   const [customCode, setCustomCode] = useState(() =>
-    createDefaultCustomCode(defaults.xColumn, defaults.yColumn, result)
+    createDefaultCustomCode(defaults.xColumn, defaults.yColumn, result),
   );
   const [appliedCustomCode, setAppliedCustomCode] = useState(customCode);
   const [renderError, setRenderError] = useState<string | null>(null);
@@ -124,7 +139,11 @@ export function QueryResultsChart({ result }: Props) {
     setYAxisScale("auto");
     setColorColumn(null);
     setFacetColumn(null);
-    const nextCustomCode = createDefaultCustomCode(defaults.xColumn, defaults.yColumn, result);
+    const nextCustomCode = createDefaultCustomCode(
+      defaults.xColumn,
+      defaults.yColumn,
+      result,
+    );
     setCustomCode(nextCustomCode);
     setAppliedCustomCode(nextCustomCode);
   }, [defaults, result, resultSignature]);
@@ -158,7 +177,13 @@ export function QueryResultsChart({ result }: Props) {
     try {
       const plot =
         mode === "custom"
-          ? renderCustomPlot(appliedCustomCode, data, result.columns, result.column_types, width)
+          ? renderCustomPlot(
+              appliedCustomCode,
+              data,
+              result.columns,
+              result.column_types,
+              width,
+            )
           : renderGuidedPlot({
               chartType,
               data,
@@ -252,28 +277,38 @@ export function QueryResultsChart({ result }: Props) {
               label="X"
               value={xColumn}
               onValueChange={setXColumn}
-              options={result.columns.map((column) => ({ value: column, label: column }))}
+              options={result.columns.map((column) => ({
+                value: column,
+                label: column,
+              }))}
             />
             <SelectField
               label="Y"
               value={yColumn}
               onValueChange={setYColumn}
-              options={result.columns.map((column) => ({ value: column, label: column }))}
+              options={result.columns.map((column) => ({
+                value: column,
+                label: column,
+              }))}
             />
             <SelectField
               label="X scale"
               value={xAxisScale}
-              onValueChange={(value) => setXAxisScale(value as PlotAxisScaleSelection)}
+              onValueChange={(value) =>
+                setXAxisScale(value as PlotAxisScaleSelection)
+              }
               options={axisScaleOptionsWithInferred(
-                inferPlotAxisOptions(result, xColumn, "x", chartType)
+                inferPlotAxisOptions(result, xColumn, "x", chartType),
               )}
             />
             <SelectField
               label="Y scale"
               value={yAxisScale}
-              onValueChange={(value) => setYAxisScale(value as PlotAxisScaleSelection)}
+              onValueChange={(value) =>
+                setYAxisScale(value as PlotAxisScaleSelection)
+              }
               options={axisScaleOptionsWithInferred(
-                inferPlotAxisOptions(result, yColumn, "y", chartType)
+                inferPlotAxisOptions(result, yColumn, "y", chartType),
               )}
             />
             <SelectField
@@ -284,7 +319,10 @@ export function QueryResultsChart({ result }: Props) {
               }
               options={[
                 { value: NONE_VALUE, label: "None" },
-                ...result.columns.map((column) => ({ value: column, label: column })),
+                ...result.columns.map((column) => ({
+                  value: column,
+                  label: column,
+                })),
               ]}
             />
             <SelectField
@@ -295,7 +333,10 @@ export function QueryResultsChart({ result }: Props) {
               }
               options={[
                 { value: NONE_VALUE, label: "None" },
-                ...result.columns.map((column) => ({ value: column, label: column })),
+                ...result.columns.map((column) => ({
+                  value: column,
+                  label: column,
+                })),
               ]}
             />
           </div>
@@ -317,8 +358,9 @@ export function QueryResultsChart({ result }: Props) {
               onRun={setAppliedCustomCode}
             />
             <p className="text-xs text-muted-foreground">
-              Available variables: Plot, data, columns, columnTypes, width, height.
-              Return the result of Plot.plot(...), or enter Plot.plot(...) as an expression.
+              Available variables: Plot, data, columns, columnTypes, width,
+              height. Return the result of Plot.plot(...), or enter
+              Plot.plot(...) as an expression.
             </p>
           </div>
         )}
@@ -370,11 +412,13 @@ function SelectField({
 }
 
 function customPlotCompletionSource(context: CompletionContext) {
-  const scaleTypeValue = context.matchBefore(/(?:^|[\s,{])type\s*:\s*["'][\w-]*$/);
+  const scaleTypeValue = context.matchBefore(
+    /(?:^|[\s,{])type\s*:\s*["'][\w-]*$/,
+  );
   if (scaleTypeValue) {
     const quoteIndex = Math.max(
       scaleTypeValue.text.lastIndexOf('"'),
-      scaleTypeValue.text.lastIndexOf("'")
+      scaleTypeValue.text.lastIndexOf("'"),
     );
     return {
       from: scaleTypeValue.from + quoteIndex + 1,
@@ -423,7 +467,7 @@ function CustomPlotCodeEditor({
   const [height, setHeight] = usePersistedNumber(
     CUSTOM_PLOT_EDITOR_HEIGHT_STORAGE_KEY,
     DEFAULT_CUSTOM_PLOT_EDITOR_HEIGHT,
-    CUSTOM_PLOT_EDITOR_HEIGHT_BOUNDS
+    CUSTOM_PLOT_EDITOR_HEIGHT_BOUNDS,
   );
   const resizing = useRef(false);
 
@@ -484,7 +528,8 @@ function CustomPlotCodeEditor({
         },
         ".cm-scroller": {
           overflow: "auto",
-          fontFamily: "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace",
+          fontFamily:
+            "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace",
         },
         ".cm-content": {
           padding: "8px 0",
@@ -536,29 +581,32 @@ function CustomPlotCodeEditor({
     });
   }, [javascriptSupport]);
 
-  const handleResizeDown = useCallback((event: React.MouseEvent) => {
-    event.preventDefault();
-    resizing.current = true;
-    const startY = event.clientY;
-    const startHeight = height;
+  const handleResizeDown = useCallback(
+    (event: React.MouseEvent) => {
+      event.preventDefault();
+      resizing.current = true;
+      const startY = event.clientY;
+      const startHeight = height;
 
-    const onMove = (moveEvent: MouseEvent) => {
-      if (!resizing.current) return;
-      setHeight(startHeight + moveEvent.clientY - startY);
-    };
-    const onUp = () => {
-      resizing.current = false;
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-    };
+      const onMove = (moveEvent: MouseEvent) => {
+        if (!resizing.current) return;
+        setHeight(startHeight + moveEvent.clientY - startY);
+      };
+      const onUp = () => {
+        resizing.current = false;
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+      };
 
-    document.body.style.cursor = "row-resize";
-    document.body.style.userSelect = "none";
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup", onUp);
-  }, [height, setHeight]);
+      document.body.style.cursor = "row-resize";
+      document.body.style.userSelect = "none";
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    },
+    [height, setHeight],
+  );
 
   useEffect(() => {
     const view = viewRef.current;
@@ -608,12 +656,26 @@ function renderGuidedPlot({
   yAxisScale: PlotAxisScaleSelection;
   result: QueryResult;
 }) {
-  const xAxis = resolvePlotAxisOptions(xAxisScale, result, xColumn, "x", chartType);
-  const yAxis = resolvePlotAxisOptions(yAxisScale, result, yColumn, "y", chartType);
+  const xAxis = resolvePlotAxisOptions(
+    xAxisScale,
+    result,
+    xColumn,
+    "x",
+    chartType,
+  );
+  const yAxis = resolvePlotAxisOptions(
+    yAxisScale,
+    result,
+    yColumn,
+    "y",
+    chartType,
+  );
   const channels = {
     x: xColumn,
     y: yColumn,
-    ...(colorColumn ? { stroke: colorColumn, fill: colorColumn, z: colorColumn } : {}),
+    ...(colorColumn
+      ? { stroke: colorColumn, fill: colorColumn, z: colorColumn }
+      : {}),
     ...(facetColumn ? { fx: facetColumn } : {}),
     tip: true,
   };
@@ -621,8 +683,8 @@ function renderGuidedPlot({
     chartType === "bar"
       ? [Plot.barY(data, channels)]
       : chartType === "scatter"
-      ? [Plot.dot(data, channels)]
-      : [Plot.line(data, channels), Plot.dot(data, channels)];
+        ? [Plot.dot(data, channels)]
+        : [Plot.line(data, channels), Plot.dot(data, channels)];
 
   return Plot.plot({
     width,
@@ -647,10 +709,17 @@ function renderCustomPlot(
   data: PlotDatum[],
   columns: string[],
   columnTypes: string[],
-  width: number
+  width: number,
 ) {
   const factory = createCustomPlotFactory(source);
-  const result = factory(Plot, data, columns, columnTypes, width, DEFAULT_HEIGHT);
+  const result = factory(
+    Plot,
+    data,
+    columns,
+    columnTypes,
+    width,
+    DEFAULT_HEIGHT,
+  );
 
   if (!(result instanceof Node)) {
     throw new Error("Custom code must return the result of Plot.plot(...).");
@@ -674,7 +743,7 @@ function createCustomPlotFactory(source: string) {
       "columnTypes",
       "width",
       "height",
-      `return (${expressionSource});`
+      `return (${expressionSource});`,
     ) as CustomPlotFactory;
   } catch {
     return new Function(
@@ -684,7 +753,7 @@ function createCustomPlotFactory(source: string) {
       "columnTypes",
       "width",
       "height",
-      trimmedSource
+      trimmedSource,
     ) as CustomPlotFactory;
   }
 }
@@ -695,7 +764,7 @@ type CustomPlotFactory = (
   columns: string[],
   columnTypes: string[],
   width: number,
-  height: number
+  height: number,
 ) => unknown;
 
 function removeRenderedPlot(plot: Node | null) {
@@ -706,10 +775,12 @@ function removeRenderedPlot(plot: Node | null) {
 
 function getDefaultColumns(result: QueryResult) {
   const numericColumn = result.columns.find((_, index) =>
-    isNumericColumnType(result.column_types[index])
+    isNumericColumnType(result.column_types[index]),
   );
   const xColumn =
-    result.columns.find((column) => column !== numericColumn) ?? result.columns[0] ?? "";
+    result.columns.find((column) => column !== numericColumn) ??
+    result.columns[0] ??
+    "";
   const yColumn = numericColumn ?? result.columns[1] ?? result.columns[0] ?? "";
 
   return { xColumn, yColumn };
@@ -718,7 +789,7 @@ function getDefaultColumns(result: QueryResult) {
 function createDefaultCustomCode(
   xColumn: string,
   yColumn: string,
-  result: QueryResult
+  result: QueryResult,
 ) {
   const xAxis = inferPlotAxisOptions(result, xColumn, "x", "scatter");
   const yAxis = inferPlotAxisOptions(result, yColumn, "y", "scatter");
@@ -746,7 +817,10 @@ function rowsToObjects(result: QueryResult): PlotDatum[] {
   return result.rows.map((row) => {
     const datum: PlotDatum = {};
     result.columns.forEach((column, index) => {
-      datum[column] = normalizePlotValue(row[index], result.column_types[index]);
+      datum[column] = normalizePlotValue(
+        row[index],
+        result.column_types[index],
+      );
     });
     return datum;
   });
@@ -772,13 +846,16 @@ function inferPlotAxisOptions(
   result: QueryResult,
   column: string,
   role: PlotAxisRole,
-  chartType: ChartType
+  chartType: ChartType,
 ): PlotAxisOptions {
   const columnIndex = result.columns.indexOf(column);
-  const columnType = columnIndex >= 0 ? result.column_types[columnIndex] : undefined;
+  const columnType =
+    columnIndex >= 0 ? result.column_types[columnIndex] : undefined;
   const values =
     columnIndex >= 0
-      ? result.rows.slice(0, AXIS_INFERENCE_SAMPLE_SIZE).map((row) => row[columnIndex])
+      ? result.rows
+          .slice(0, AXIS_INFERENCE_SAMPLE_SIZE)
+          .map((row) => row[columnIndex])
       : [];
 
   if (isTemporalColumnType(columnType) || valuesLookTemporal(values)) {
@@ -797,7 +874,7 @@ function resolvePlotAxisOptions(
   result: QueryResult,
   column: string,
   role: PlotAxisRole,
-  chartType: ChartType
+  chartType: ChartType,
 ): PlotAxisOptions {
   if (selection !== "auto") {
     return { type: selection };
@@ -810,7 +887,7 @@ function axisScaleOptionsWithInferred(inferred: PlotAxisOptions) {
   return AXIS_SCALE_OPTIONS.map((option) =>
     option.value === "auto"
       ? { ...option, label: `Auto (${formatAxisScaleLabel(inferred.type)})` }
-      : option
+      : option,
   );
 }
 
@@ -829,13 +906,16 @@ function isTemporalColumnType(columnType: string | undefined) {
 }
 
 function valuesLookTemporal(values: unknown[]) {
-  const nonNullValues = values.filter((value) => value !== null && value !== undefined);
+  const nonNullValues = values.filter(
+    (value) => value !== null && value !== undefined,
+  );
   if (nonNullValues.length === 0) return false;
 
   const temporalValues = nonNullValues.filter((value) => {
     if (value instanceof Date) return !Number.isNaN(value.getTime());
     if (typeof value !== "string") return false;
-    if (!/\d{4}-\d{1,2}-\d{1,2}|T\d{1,2}:\d{2}|:\d{2}/.test(value)) return false;
+    if (!/\d{4}-\d{1,2}-\d{1,2}|T\d{1,2}:\d{2}|:\d{2}/.test(value))
+      return false;
     return !Number.isNaN(new Date(value).getTime());
   });
 
@@ -843,7 +923,9 @@ function valuesLookTemporal(values: unknown[]) {
 }
 
 function valuesLookNumeric(values: unknown[]) {
-  const nonNullValues = values.filter((value) => value !== null && value !== undefined);
+  const nonNullValues = values.filter(
+    (value) => value !== null && value !== undefined,
+  );
   if (nonNullValues.length === 0) return false;
 
   const numericValues = nonNullValues.filter((value) => {

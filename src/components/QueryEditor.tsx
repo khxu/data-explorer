@@ -2,8 +2,18 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAppState } from "@/hooks/useAppState";
-import { cancelQuery, executeQuery, getStandaloneSql, releaseQueryResult, type QueryResult } from "@/lib/api";
-import { formatQueryCellValue, hasDuckDbTimestampValues, isNumericColumnType } from "@/lib/utils";
+import {
+  cancelQuery,
+  executeQuery,
+  getStandaloneSql,
+  releaseQueryResult,
+  type QueryResult,
+} from "@/lib/api";
+import {
+  formatQueryCellValue,
+  hasDuckDbTimestampValues,
+  isNumericColumnType,
+} from "@/lib/utils";
 import { AiSqlAssistant } from "./AiSqlAssistant";
 import { ExportDialog } from "./ExportDialog";
 import { QueryResultsChart } from "./QueryResultsChart";
@@ -54,8 +64,8 @@ export function QueryEditor() {
       queryTabProjectFilter === ALL_QUERY_TAB_PROJECTS
         ? undefined
         : queryTabProjectFilter !== UNASSIGNED_QUERY_TAB_PROJECT
-        ? queryTabProjectFilter
-        : null;
+          ? queryTabProjectFilter
+          : null;
     return (
       <div className="flex h-full items-center justify-center">
         <div className="space-y-3 text-center">
@@ -133,7 +143,9 @@ export function QueryEditor() {
     if (!result) return;
 
     try {
-      await navigator.clipboard.writeText(formatMarkdownTable(result, renderTimestampsAsIso));
+      await navigator.clipboard.writeText(
+        formatMarkdownTable(result, renderTimestampsAsIso),
+      );
       setCopiedMarkdown(true);
       setTimeout(() => setCopiedMarkdown(false), 2000);
     } catch (e) {
@@ -155,7 +167,11 @@ export function QueryEditor() {
           />
           <div className="flex items-center justify-between">
             <div className="flex gap-2">
-              <Button onClick={handleRun} disabled={running || !sql.trim()} size="sm">
+              <Button
+                onClick={handleRun}
+                disabled={running || !sql.trim()}
+                size="sm"
+              >
                 {running ? `Running ${elapsedLabel}` : "▶ Run"}
               </Button>
               {running && (
@@ -205,7 +221,9 @@ export function QueryEditor() {
                 AI Assist
               </Button>
             </div>
-            <span className="text-xs text-muted-foreground">⌘+Enter to run</span>
+            <span className="text-xs text-muted-foreground">
+              ⌘+Enter to run
+            </span>
           </div>
           {running && (
             <div className="space-y-1" role="status" aria-live="polite">
@@ -255,7 +273,9 @@ export function QueryEditor() {
                       type="button"
                       variant={renderTimestampsAsIso ? "default" : "outline"}
                       size="sm"
-                      onClick={() => setRenderTimestampsAsIso((value) => !value)}
+                      onClick={() =>
+                        setRenderTimestampsAsIso((value) => !value)
+                      }
                       title="Render DuckDB timestamp values as ISO 8601 strings"
                     >
                       ISO timestamps
@@ -322,10 +342,15 @@ function formatElapsed(ms: number) {
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
-function formatMarkdownTable(result: QueryResult, renderTimestampsAsIso: boolean) {
+function formatMarkdownTable(
+  result: QueryResult,
+  renderTimestampsAsIso: boolean,
+) {
   const header = result.columns.map(formatMarkdownTableCell).join(" | ");
   const separator = result.columns
-    .map((_, index) => (isNumericColumnType(result.column_types[index]) ? "---:" : "---"))
+    .map((_, index) =>
+      isNumericColumnType(result.column_types[index]) ? "---:" : "---",
+    )
     .join(" | ");
   const rows = result.rows.map((row) =>
     result.columns
@@ -334,21 +359,29 @@ function formatMarkdownTable(result: QueryResult, renderTimestampsAsIso: boolean
           formatQueryCellValue(row[index], result.column_types[index], {
             renderTimestampsAsIso,
             formatValue: formatMarkdownRawCellValue,
-          })
-        )
+          }),
+        ),
       )
-      .join(" | ")
+      .join(" | "),
   );
 
-  return [`| ${header} |`, `| ${separator} |`, ...rows.map((row) => `| ${row} |`)].join("\n");
+  return [
+    `| ${header} |`,
+    `| ${separator} |`,
+    ...rows.map((row) => `| ${row} |`),
+  ].join("\n");
 }
 
 function formatMarkdownTableCell(value: unknown) {
   if (value === null || value === undefined) return "";
 
-  return formatMarkdownRawCellValue(value).replace(/\r?\n/g, "<br>").replace(/\|/g, "\\|");
+  return formatMarkdownRawCellValue(value)
+    .replace(/\r?\n/g, "<br>")
+    .replace(/\|/g, "\\|");
 }
 
 function formatMarkdownRawCellValue(value: unknown) {
-  return typeof value === "string" ? value : JSON.stringify(value) ?? String(value);
+  return typeof value === "string"
+    ? value
+    : (JSON.stringify(value) ?? String(value));
 }

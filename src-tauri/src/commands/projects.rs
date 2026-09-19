@@ -58,10 +58,7 @@ pub fn update_project(
 #[tauri::command]
 pub fn delete_project(db: State<std::sync::Arc<Database>>, id: String) -> Result<(), AppError> {
     let conn = db.conn.lock().unwrap();
-    conn.execute(
-        "DELETE FROM projects WHERE id = ?1",
-        rusqlite::params![id],
-    )?;
+    conn.execute("DELETE FROM projects WHERE id = ?1", rusqlite::params![id])?;
     Ok(())
 }
 
@@ -72,8 +69,7 @@ pub fn list_projects(db: State<std::sync::Arc<Database>>) -> Result<Vec<Project>
         conn.prepare("SELECT id, name, description, tag_filter, created_at, updated_at FROM projects ORDER BY name")?;
     let rows = stmt.query_map([], |row| {
         let tag_json: String = row.get(3)?;
-        let tag_filter: Vec<String> =
-            serde_json::from_str(&tag_json).unwrap_or_default();
+        let tag_filter: Vec<String> = serde_json::from_str(&tag_json).unwrap_or_default();
         Ok(Project {
             id: row.get(0)?,
             name: row.get(1)?,

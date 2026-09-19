@@ -18,7 +18,11 @@ interface Props {
   dataSource: DataSource | null;
 }
 
-export function EditDataSourceTagsDialog({ open: isOpen, onClose, dataSource }: Props) {
+export function EditDataSourceTagsDialog({
+  open: isOpen,
+  onClose,
+  dataSource,
+}: Props) {
   const { tags, refreshDataSources } = useAppState();
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -31,7 +35,7 @@ export function EditDataSourceTagsDialog({ open: isOpen, onClose, dataSource }: 
 
   function toggleTag(tagId: string) {
     setSelectedTagIds((prev) =>
-      prev.includes(tagId) ? prev.filter((t) => t !== tagId) : [...prev, tagId]
+      prev.includes(tagId) ? prev.filter((t) => t !== tagId) : [...prev, tagId],
     );
   }
 
@@ -62,13 +66,18 @@ export function EditDataSourceTagsDialog({ open: isOpen, onClose, dataSource }: 
     <Dialog open={isOpen} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="min-w-0 sm:max-w-sm">
         <DialogHeader className="min-w-0">
-          <DialogTitle className="truncate">Edit Tags — {dataSource.name}</DialogTitle>
+          <DialogTitle className="truncate">
+            Edit Tags — {dataSource.name}
+          </DialogTitle>
         </DialogHeader>
         <div className="min-w-0 space-y-4">
           {dataSource.file_paths.length > 1 ? (
             <ul className="max-h-48 list-disc space-y-1 overflow-y-auto pl-4 text-xs text-muted-foreground">
               {dataSource.file_paths.map((filePath) => (
-                <li key={filePath} className="max-w-full [overflow-wrap:anywhere]">
+                <li
+                  key={filePath}
+                  className="max-w-full [overflow-wrap:anywhere]"
+                >
                   {filePath}
                 </li>
               ))}
@@ -85,7 +94,9 @@ export function EditDataSourceTagsDialog({ open: isOpen, onClose, dataSource }: 
                 {tags.map((tag) => (
                   <Badge
                     key={tag.id}
-                    variant={selectedTagIds.includes(tag.id) ? "default" : "outline"}
+                    variant={
+                      selectedTagIds.includes(tag.id) ? "default" : "outline"
+                    }
                     className="cursor-pointer"
                     onClick={() => toggleTag(tag.id)}
                   >
@@ -100,7 +111,8 @@ export function EditDataSourceTagsDialog({ open: isOpen, onClose, dataSource }: 
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">
-              No tags exist yet. Create tags first using the ⚙ button in the sidebar.
+              No tags exist yet. Create tags first using the ⚙ button in the
+              sidebar.
             </p>
           )}
         </div>

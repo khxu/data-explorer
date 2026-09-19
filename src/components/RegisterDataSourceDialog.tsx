@@ -33,7 +33,15 @@ export function RegisterDataSourceDialog({ open: isOpen, onClose }: Props) {
       filters: [
         {
           name: "Data Files",
-          extensions: ["parquet", "pq", "csv", "tsv", "json", "jsonl", "ndjson"],
+          extensions: [
+            "parquet",
+            "pq",
+            "csv",
+            "tsv",
+            "json",
+            "jsonl",
+            "ndjson",
+          ],
         },
       ],
     });
@@ -51,7 +59,7 @@ export function RegisterDataSourceDialog({ open: isOpen, onClose }: Props) {
 
   function toggleTag(tagId: string) {
     setSelectedTagIds((prev) =>
-      prev.includes(tagId) ? prev.filter((t) => t !== tagId) : [...prev, tagId]
+      prev.includes(tagId) ? prev.filter((t) => t !== tagId) : [...prev, tagId],
     );
   }
 
@@ -90,7 +98,7 @@ export function RegisterDataSourceDialog({ open: isOpen, onClose }: Props) {
                 value={
                   filePaths.length > 1
                     ? `${filePaths.length} files selected`
-                    : filePaths[0] ?? ""
+                    : (filePaths[0] ?? "")
                 }
                 placeholder="Select one or more data files..."
                 readOnly
@@ -116,7 +124,9 @@ export function RegisterDataSourceDialog({ open: isOpen, onClose }: Props) {
                 {tags.map((tag) => (
                   <Badge
                     key={tag.id}
-                    variant={selectedTagIds.includes(tag.id) ? "default" : "outline"}
+                    variant={
+                      selectedTagIds.includes(tag.id) ? "default" : "outline"
+                    }
                     className="cursor-pointer"
                     onClick={() => toggleTag(tag.id)}
                   >
@@ -132,7 +142,10 @@ export function RegisterDataSourceDialog({ open: isOpen, onClose }: Props) {
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={filePaths.length === 0 || !name || loading}>
+          <Button
+            onClick={handleSubmit}
+            disabled={filePaths.length === 0 || !name || loading}
+          >
             {loading ? "Registering..." : "Register"}
           </Button>
         </DialogFooter>

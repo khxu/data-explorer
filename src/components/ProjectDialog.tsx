@@ -38,7 +38,7 @@ export function ProjectDialog({ open: isOpen, onClose, editProject }: Props) {
 
   function toggleTag(tagId: string) {
     setSelectedTagIds((prev) =>
-      prev.includes(tagId) ? prev.filter((t) => t !== tagId) : [...prev, tagId]
+      prev.includes(tagId) ? prev.filter((t) => t !== tagId) : [...prev, tagId],
     );
   }
 
@@ -51,7 +51,7 @@ export function ProjectDialog({ open: isOpen, onClose, editProject }: Props) {
           editProject.id,
           name.trim(),
           description || null,
-          selectedTagIds
+          selectedTagIds,
         );
       } else {
         await createProject(name.trim(), description || null, selectedTagIds);
@@ -96,7 +96,9 @@ export function ProjectDialog({ open: isOpen, onClose, editProject }: Props) {
                 {tags.map((tag) => (
                   <Badge
                     key={tag.id}
-                    variant={selectedTagIds.includes(tag.id) ? "default" : "outline"}
+                    variant={
+                      selectedTagIds.includes(tag.id) ? "default" : "outline"
+                    }
                     className="cursor-pointer"
                     onClick={() => toggleTag(tag.id)}
                   >

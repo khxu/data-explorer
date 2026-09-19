@@ -26,13 +26,20 @@ interface Props {
   resultTableName?: string | null;
 }
 
-export function ExportDialog({ open: isOpen, onClose, sql, resultTableName }: Props) {
+export function ExportDialog({
+  open: isOpen,
+  onClose,
+  sql,
+  resultTableName,
+}: Props) {
   const [format, setFormat] = useState("parquet");
   const [destPath, setDestPath] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [destinationNotice, setDestinationNotice] = useState<string | null>(null);
+  const [destinationNotice, setDestinationNotice] = useState<string | null>(
+    null,
+  );
 
   async function pickDestination() {
     const defaultExt = format === "parquet" ? "parquet" : "csv";

@@ -13,8 +13,14 @@ import { useAppState } from "@/hooks/useAppState";
 import { createTag, deleteTag } from "@/lib/api";
 
 const TAG_COLORS = [
-  "#ef4444", "#f97316", "#eab308", "#22c55e",
-  "#06b6d4", "#3b82f6", "#8b5cf6", "#ec4899",
+  "#ef4444",
+  "#f97316",
+  "#eab308",
+  "#22c55e",
+  "#06b6d4",
+  "#3b82f6",
+  "#8b5cf6",
+  "#ec4899",
 ];
 
 interface Props {
@@ -63,7 +69,11 @@ export function TagManagerDialog({ open: isOpen, onClose }: Props) {
                 onKeyDown={(e) => e.key === "Enter" && handleCreate()}
                 className="flex-1"
               />
-              <Button onClick={handleCreate} disabled={!newName.trim() || loading} size="sm">
+              <Button
+                onClick={handleCreate}
+                disabled={!newName.trim() || loading}
+                size="sm"
+              >
                 Add
               </Button>
             </div>
@@ -84,7 +94,10 @@ export function TagManagerDialog({ open: isOpen, onClose }: Props) {
           </div>
           <div className="space-y-1">
             {tags.map((tag) => (
-              <div key={tag.id} className="flex items-center justify-between py-1">
+              <div
+                key={tag.id}
+                className="flex items-center justify-between py-1"
+              >
                 <div className="flex items-center gap-2">
                   <span
                     className="w-3 h-3 rounded-full inline-block"

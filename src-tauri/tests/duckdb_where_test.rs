@@ -16,10 +16,10 @@ impl Engine {
     }
 
     fn register(&self, name: &str, path: &str, format: &str) {
-        self.sources.lock().unwrap().insert(
-            name.to_string(),
-            (path.to_string(), format.to_string()),
-        );
+        self.sources
+            .lock()
+            .unwrap()
+            .insert(name.to_string(), (path.to_string(), format.to_string()));
     }
 
     fn wrap_query(&self, user_sql: &str) -> String {
@@ -43,7 +43,10 @@ impl Engine {
         let trimmed = user_sql.trim_start();
         if trimmed.len() >= 4
             && trimmed[..4].eq_ignore_ascii_case("with")
-            && trimmed.as_bytes().get(4).map_or(false, |b| b.is_ascii_whitespace())
+            && trimmed
+                .as_bytes()
+                .get(4)
+                .map_or(false, |b| b.is_ascii_whitespace())
         {
             format!("WITH {}, {}", cte_block, &trimmed[4..].trim_start())
         } else {
@@ -97,32 +100,35 @@ fn test_cte_approach_with_where() {
     let tmp = Connection::open_in_memory().unwrap();
     tmp.execute_batch(
         "COPY (SELECT i AS id, 'row_' || i AS name FROM range(50) t(i)) \
-         TO '/tmp/rs_graph_document_repository_link.parquet' (FORMAT PARQUET)"
-    ).unwrap();
+         TO '/tmp/rs_graph_document_repository_link.parquet' (FORMAT PARQUET)",
+    )
+    .unwrap();
 
     let engine = Engine::new();
     engine.register(
         "rs_graph_document_repository_link",
         "/tmp/rs_graph_document_repository_link.parquet",
-        "parquet"
+        "parquet",
     );
 
     // No WHERE
-    let r1 = engine.query_with_result(
-        "SELECT * FROM \"rs_graph_document_repository_link\" LIMIT 100"
-    ).unwrap();
+    let r1 = engine
+        .query_with_result("SELECT * FROM \"rs_graph_document_repository_link\" LIMIT 100")
+        .unwrap();
     assert_eq!(r1.len(), 50);
 
     // With WHERE — this was the failing case
-    let r2 = engine.query_with_result(
-        "SELECT * FROM \"rs_graph_document_repository_link\" WHERE id = 1 LIMIT 100"
-    ).unwrap();
+    let r2 = engine
+        .query_with_result(
+            "SELECT * FROM \"rs_graph_document_repository_link\" WHERE id = 1 LIMIT 100",
+        )
+        .unwrap();
     assert_eq!(r2.len(), 1);
 
     // Without quotes
-    let r3 = engine.query_with_result(
-        "SELECT * FROM rs_graph_document_repository_link WHERE id = 1 LIMIT 100"
-    ).unwrap();
+    let r3 = engine
+        .query_with_result("SELECT * FROM rs_graph_document_repository_link WHERE id = 1 LIMIT 100")
+        .unwrap();
     assert_eq!(r3.len(), 1);
 }
 
@@ -131,8 +137,9 @@ fn test_cte_sequential_where_queries() {
     let tmp = Connection::open_in_memory().unwrap();
     tmp.execute_batch(
         "COPY (SELECT i AS id, 'val' || i AS val FROM range(20) t(i)) \
-         TO '/tmp/seq_test.parquet' (FORMAT PARQUET)"
-    ).unwrap();
+         TO '/tmp/seq_test.parquet' (FORMAT PARQUET)",
+    )
+    .unwrap();
 
     let engine = Engine::new();
     engine.register("seq_test", "/tmp/seq_test.parquet", "parquet");
@@ -143,7 +150,9 @@ fn test_cte_sequential_where_queries() {
         assert_eq!(r.len(), 1, "Query for id={} failed", i);
     }
 
-    let r = engine.query_with_result("SELECT * FROM seq_test LIMIT 100").unwrap();
+    let r = engine
+        .query_with_result("SELECT * FROM seq_test LIMIT 100")
+        .unwrap();
     assert_eq!(r.len(), 20);
 }
 
@@ -154,7 +163,9 @@ fn test_cte_with_csv() {
     let engine = Engine::new();
     engine.register("test_cte", "/tmp/test_cte.csv", "csv");
 
-    let r = engine.query_with_result("SELECT * FROM test_cte WHERE id = 2").unwrap();
+    let r = engine
+        .query_with_result("SELECT * FROM test_cte WHERE id = 2")
+        .unwrap();
     assert_eq!(r.len(), 1);
 }
 
@@ -163,15 +174,18 @@ fn test_cte_user_query_with_existing_with() {
     let tmp = Connection::open_in_memory().unwrap();
     tmp.execute_batch(
         "COPY (SELECT i AS id FROM range(10) t(i)) \
-         TO '/tmp/test_with_cte.parquet' (FORMAT PARQUET)"
-    ).unwrap();
+         TO '/tmp/test_with_cte.parquet' (FORMAT PARQUET)",
+    )
+    .unwrap();
 
     let engine = Engine::new();
     engine.register("test_with_cte", "/tmp/test_with_cte.parquet", "parquet");
 
-    let r = engine.query_with_result(
-        "WITH doubled AS (SELECT id, id*2 AS doubled_id FROM test_with_cte) \
-         SELECT * FROM doubled WHERE id = 3"
-    ).unwrap();
+    let r = engine
+        .query_with_result(
+            "WITH doubled AS (SELECT id, id*2 AS doubled_id FROM test_with_cte) \
+         SELECT * FROM doubled WHERE id = 3",
+        )
+        .unwrap();
     assert_eq!(r.len(), 1);
 }

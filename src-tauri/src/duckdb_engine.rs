@@ -782,7 +782,10 @@ mod tests {
             .unwrap();
 
         let missing_path = std::env::temp_dir()
-            .join(format!("data_explorer_missing_source_{}.csv", uuid::Uuid::new_v4().simple()))
+            .join(format!(
+                "data_explorer_missing_source_{}.csv",
+                uuid::Uuid::new_v4().simple()
+            ))
             .to_string_lossy()
             .into_owned();
         let error = engine
@@ -930,16 +933,14 @@ JOIN policy_keywords ON LOWER(searchablebill.raw_text) LIKE policy_keywords.keyw
 
         let standalone = engine.inline_sources(sql).unwrap();
 
-        assert!(standalone
-            .contains(&format!(
-                "FROM read_csv('{}') AS github_policy_keywords",
-                policy_keywords_path
-            )));
-        assert!(standalone
-            .contains(&format!(
-                "FROM read_parquet('{}') AS searchablebill",
-                searchable_bill_path
-            )));
+        assert!(standalone.contains(&format!(
+            "FROM read_csv('{}') AS github_policy_keywords",
+            policy_keywords_path
+        )));
+        assert!(standalone.contains(&format!(
+            "FROM read_parquet('{}') AS searchablebill",
+            searchable_bill_path
+        )));
         assert!(standalone.contains("JOIN policy_keywords ON"));
         assert!(standalone.contains("searchablebill.raw_text[:140]"));
         assert!(!standalone.contains("read_parquet('/tmp/searchablebill.parquet').raw_text"));

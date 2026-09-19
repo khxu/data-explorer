@@ -34,12 +34,15 @@ const HEADER_HEIGHT = 40;
 const ROW_HEIGHT = 29;
 const ROW_OVERSCAN = 8;
 
-export function ResizableResultsTable({ result, renderTimestampsAsIso = false }: Props) {
+export function ResizableResultsTable({
+  result,
+  renderTimestampsAsIso = false,
+}: Props) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(0);
   const [columnWidths, setColumnWidths] = useState<number[]>(() =>
-    result.columns.map(() => DEFAULT_COL_WIDTH)
+    result.columns.map(() => DEFAULT_COL_WIDTH),
   );
   const [inspectedCell, setInspectedCell] = useState<{
     column: string;
@@ -47,7 +50,11 @@ export function ResizableResultsTable({ result, renderTimestampsAsIso = false }:
   } | null>(null);
   const [copiedCell, setCopiedCell] = useState(false);
 
-  const resizing = useRef<{ index: number; startX: number; startWidth: number } | null>(null);
+  const resizing = useRef<{
+    index: number;
+    startX: number;
+    startWidth: number;
+  } | null>(null);
 
   useEffect(() => {
     const scrollEl = scrollRef.current;
@@ -77,7 +84,10 @@ export function ResizableResultsTable({ result, renderTimestampsAsIso = false }:
       const handleMouseMove = (ev: MouseEvent) => {
         if (!resizing.current) return;
         const diff = ev.clientX - resizing.current.startX;
-        const newWidth = Math.max(MIN_COL_WIDTH, resizing.current.startWidth + diff);
+        const newWidth = Math.max(
+          MIN_COL_WIDTH,
+          resizing.current.startWidth + diff,
+        );
         setColumnWidths((prev) => {
           const next = [...prev];
           next[resizing.current!.index] = newWidth;
@@ -94,7 +104,7 @@ export function ResizableResultsTable({ result, renderTimestampsAsIso = false }:
       document.addEventListener("mousemove", handleMouseMove);
       document.addEventListener("mouseup", handleMouseUp);
     },
-    [columnWidths]
+    [columnWidths],
   );
 
   useEffect(() => {
@@ -114,12 +124,12 @@ export function ResizableResultsTable({ result, renderTimestampsAsIso = false }:
     const visibleStart = Math.max(0, scrollTop - HEADER_HEIGHT);
     const estimatedStartIndex = Math.max(
       0,
-      Math.floor(visibleStart / ROW_HEIGHT) - ROW_OVERSCAN
+      Math.floor(visibleStart / ROW_HEIGHT) - ROW_OVERSCAN,
     );
     const startIndex = Math.min(estimatedStartIndex, rowCount);
     const endIndex = Math.min(
       rowCount,
-      Math.ceil((visibleStart + viewportHeight) / ROW_HEIGHT) + ROW_OVERSCAN
+      Math.ceil((visibleStart + viewportHeight) / ROW_HEIGHT) + ROW_OVERSCAN,
     );
 
     return {
@@ -131,8 +141,11 @@ export function ResizableResultsTable({ result, renderTimestampsAsIso = false }:
   }, [result.rows, scrollTop, viewportHeight]);
 
   const numericColumns = useMemo(
-    () => result.columns.map((_, index) => isNumericColumnType(result.column_types?.[index])),
-    [result.columns, result.column_types]
+    () =>
+      result.columns.map((_, index) =>
+        isNumericColumnType(result.column_types?.[index]),
+      ),
+    [result.columns, result.column_types],
   );
 
   function formatCellValue(cell: unknown, columnIndex: number): string {
@@ -161,7 +174,13 @@ export function ResizableResultsTable({ result, renderTimestampsAsIso = false }:
           className="h-full w-full overflow-auto"
           onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
         >
-          <Table style={{ tableLayout: "fixed", width: "max-content", minWidth: "100%" }}>
+          <Table
+            style={{
+              tableLayout: "fixed",
+              width: "max-content",
+              minWidth: "100%",
+            }}
+          >
             <TableHeader className="sticky top-0 z-10 bg-background">
               <TableRow className="hover:bg-background">
                 {result.columns.map((col, i) => {
@@ -178,7 +197,7 @@ export function ResizableResultsTable({ result, renderTimestampsAsIso = false }:
                           <span
                             className={cn(
                               "block truncate pr-2",
-                              isNumericColumn && "text-right tabular-nums"
+                              isNumericColumn && "text-right tabular-nums",
                             )}
                           >
                             {col}
@@ -186,7 +205,10 @@ export function ResizableResultsTable({ result, renderTimestampsAsIso = false }:
                         </TooltipTrigger>
                         <TooltipContent side="bottom">
                           <p className="font-mono text-xs">
-                            {col}: <span className="text-muted-foreground">{result.column_types?.[i] ?? "unknown"}</span>
+                            {col}:{" "}
+                            <span className="text-muted-foreground">
+                              {result.column_types?.[i] ?? "unknown"}
+                            </span>
                           </p>
                         </TooltipContent>
                       </Tooltip>
@@ -202,7 +224,10 @@ export function ResizableResultsTable({ result, renderTimestampsAsIso = false }:
             </TableHeader>
             <TableBody>
               {virtualRows.topSpacerHeight > 0 && (
-                <TableRow aria-hidden="true" className="border-0 hover:bg-transparent">
+                <TableRow
+                  aria-hidden="true"
+                  className="border-0 hover:bg-transparent"
+                >
                   <TableCell
                     colSpan={result.columns.length}
                     className="border-0 p-0"
@@ -223,19 +248,27 @@ export function ResizableResultsTable({ result, renderTimestampsAsIso = false }:
                           key={ci}
                           className={cn(
                             "text-xs py-1 whitespace-nowrap truncate cursor-pointer hover:bg-accent/40",
-                            isNumericColumn && "text-right tabular-nums"
+                            isNumericColumn && "text-right tabular-nums",
                           )}
-                          style={{ width: columnWidths[ci], maxWidth: columnWidths[ci] }}
+                          style={{
+                            width: columnWidths[ci],
+                            maxWidth: columnWidths[ci],
+                          }}
                           onClick={() =>
                             setInspectedCell({
                               column: result.columns[ci],
-                              value: cell === null ? "NULL" : formatCellValue(cell, ci),
+                              value:
+                                cell === null
+                                  ? "NULL"
+                                  : formatCellValue(cell, ci),
                             })
                           }
                           title="Click to inspect"
                         >
                           {cell === null ? (
-                            <span className="text-muted-foreground italic">NULL</span>
+                            <span className="text-muted-foreground italic">
+                              NULL
+                            </span>
                           ) : (
                             formatCellValue(cell, ci)
                           )}
@@ -246,7 +279,10 @@ export function ResizableResultsTable({ result, renderTimestampsAsIso = false }:
                 );
               })}
               {virtualRows.bottomSpacerHeight > 0 && (
-                <TableRow aria-hidden="true" className="border-0 hover:bg-transparent">
+                <TableRow
+                  aria-hidden="true"
+                  className="border-0 hover:bg-transparent"
+                >
                   <TableCell
                     colSpan={result.columns.length}
                     className="border-0 p-0"

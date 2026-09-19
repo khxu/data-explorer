@@ -15,7 +15,10 @@ export function extractPlaceholders(template: string): string[] {
   return placeholders;
 }
 
-export function unknownPlaceholders(template: string, columns: string[]): string[] {
+export function unknownPlaceholders(
+  template: string,
+  columns: string[],
+): string[] {
   const available = new Set(columns);
   return extractPlaceholders(template).filter((name) => !available.has(name));
 }
