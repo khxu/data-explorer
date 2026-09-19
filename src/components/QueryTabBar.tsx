@@ -63,25 +63,31 @@ export function QueryTabBar() {
     setQueryTabProject,
     moveUnassignedQueryTabsToProject,
   } = useAppState();
-  const unassignedTabCount = queryTabs.filter((tab) => tab.projectId === null).length;
+  const unassignedTabCount = queryTabs.filter(
+    (tab) => tab.projectId === null,
+  ).length;
   const filteredTabs = useMemo(
-    () => queryTabs.filter((tab) => queryTabMatchesProjectFilter(tab, queryTabProjectFilter)),
-    [queryTabs, queryTabProjectFilter]
+    () =>
+      queryTabs.filter((tab) =>
+        queryTabMatchesProjectFilter(tab, queryTabProjectFilter),
+      ),
+    [queryTabs, queryTabProjectFilter],
   );
   const activeTab = queryTabs.find((t) => t.id === activeQueryTabId);
   const activeTabIsVisible =
-    !!activeTab && queryTabMatchesProjectFilter(activeTab, queryTabProjectFilter);
+    !!activeTab &&
+    queryTabMatchesProjectFilter(activeTab, queryTabProjectFilter);
 
   const projectById = useMemo(
     () => new Map(projects.map((project) => [project.id, project])),
-    [projects]
+    [projects],
   );
   const newTabProjectId =
     queryTabProjectFilter === ALL_QUERY_TAB_PROJECTS
       ? undefined
       : queryTabProjectFilter === UNASSIGNED_QUERY_TAB_PROJECT
-      ? null
-      : queryTabProjectFilter;
+        ? null
+        : queryTabProjectFilter;
 
   const switchTab = useCallback(
     (direction: -1 | 1) => {
@@ -92,7 +98,7 @@ export function QueryTabBar() {
         setActiveQueryTab(filteredTabs[next].id);
       }
     },
-    [filteredTabs, activeQueryTabId, setActiveQueryTab]
+    [filteredTabs, activeQueryTabId, setActiveQueryTab],
   );
 
   useEffect(() => {
@@ -144,7 +150,10 @@ export function QueryTabBar() {
     addQueryTab(undefined, newTabProjectId);
   }
 
-  function getPointerDropTarget(clientX: number, clientY: number): DropTarget | null {
+  function getPointerDropTarget(
+    clientX: number,
+    clientY: number,
+  ): DropTarget | null {
     const tabElement = document
       .elementFromPoint(clientX, clientY)
       ?.closest<HTMLElement>("[data-query-tab-id]");
@@ -157,7 +166,10 @@ export function QueryTabBar() {
     };
   }
 
-  function handlePointerDown(e: React.PointerEvent<HTMLDivElement>, tabId: string) {
+  function handlePointerDown(
+    e: React.PointerEvent<HTMLDivElement>,
+    tabId: string,
+  ) {
     if (e.button !== 0) return;
 
     pointerDragRef.current = {
@@ -195,7 +207,8 @@ export function QueryTabBar() {
     if (!dragState) return;
 
     const target = getPointerDropTarget(e.clientX, e.clientY);
-    const shouldReorder = dragState.isDragging && target && target.id !== dragState.id;
+    const shouldReorder =
+      dragState.isDragging && target && target.id !== dragState.id;
     clearPointerDragState();
 
     if (shouldReorder) {
@@ -212,7 +225,9 @@ export function QueryTabBar() {
     <div className="flex h-full w-full flex-col border-r bg-muted/20">
       <div className="space-y-2 border-b p-2">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-xs font-medium text-muted-foreground">Query tabs</span>
+          <span className="text-xs font-medium text-muted-foreground">
+            Query tabs
+          </span>
           <Button
             variant="ghost"
             size="sm"
@@ -223,13 +238,18 @@ export function QueryTabBar() {
             +
           </Button>
         </div>
-        <Select value={queryTabProjectFilter} onValueChange={setQueryTabProjectFilter}>
+        <Select
+          value={queryTabProjectFilter}
+          onValueChange={setQueryTabProjectFilter}
+        >
           <SelectTrigger size="sm" className="h-7 w-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value={ALL_QUERY_TAB_PROJECTS}>All projects</SelectItem>
-            <SelectItem value={UNASSIGNED_QUERY_TAB_PROJECT}>Unassigned</SelectItem>
+            <SelectItem value={UNASSIGNED_QUERY_TAB_PROJECT}>
+              Unassigned
+            </SelectItem>
             {projects.map((project) => (
               <SelectItem key={project.id} value={project.id}>
                 {project.name}
@@ -267,7 +287,8 @@ export function QueryTabBar() {
           const isEditing = editingId === tab.id;
           const project = tab.projectId ? projectById.get(tab.projectId) : null;
           const isDragging = draggingTabId === tab.id;
-          const isDropTarget = dropTarget?.id === tab.id && draggingTabId !== tab.id;
+          const isDropTarget =
+            dropTarget?.id === tab.id && draggingTabId !== tab.id;
 
           return (
             <ContextMenu key={tab.id}>
@@ -333,20 +354,22 @@ export function QueryTabBar() {
                         <TooltipContent side="right">
                           <p>
                             {project ? `${project.name} • ` : ""}
-                            Drag to reorder • Double-click to rename • Right-click for actions
+                            Drag to reorder • Double-click to rename •
+                            Right-click for actions
                           </p>
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
                   )}
-                  {queryTabProjectFilter === ALL_QUERY_TAB_PROJECTS && project && (
-                    <Badge
-                      variant="outline"
-                      className="h-4 max-w-20 shrink-0 truncate px-1 text-[10px]"
-                    >
-                      {project.name}
-                    </Badge>
-                  )}
+                  {queryTabProjectFilter === ALL_QUERY_TAB_PROJECTS &&
+                    project && (
+                      <Badge
+                        variant="outline"
+                        className="h-4 max-w-20 shrink-0 truncate px-1 text-[10px]"
+                      >
+                        {project.name}
+                      </Badge>
+                    )}
                   {queryTabs.length > 1 && (
                     <button
                       className="ml-1 shrink-0 text-muted-foreground hover:text-destructive text-xs leading-none opacity-0 group-hover:opacity-100 transition-opacity"
@@ -363,25 +386,34 @@ export function QueryTabBar() {
                 </div>
               </ContextMenuTrigger>
               <ContextMenuContent className="w-52">
-                <ContextMenuLabel className="truncate">{tab.name}</ContextMenuLabel>
+                <ContextMenuLabel className="truncate">
+                  {tab.name}
+                </ContextMenuLabel>
                 <ContextMenuSeparator />
                 <ContextMenuSub>
-                  <ContextMenuSubTrigger>Assign to project</ContextMenuSubTrigger>
+                  <ContextMenuSubTrigger>
+                    Assign to project
+                  </ContextMenuSubTrigger>
                   <ContextMenuSubContent className="max-h-72 w-56 overflow-y-auto">
                     <ContextMenuRadioGroup
                       value={tab.projectId ?? UNASSIGNED_QUERY_TAB_PROJECT}
                       onValueChange={(value) => {
                         setQueryTabProject(
                           tab.id,
-                          value === UNASSIGNED_QUERY_TAB_PROJECT ? null : value
+                          value === UNASSIGNED_QUERY_TAB_PROJECT ? null : value,
                         );
                       }}
                     >
-                      <ContextMenuRadioItem value={UNASSIGNED_QUERY_TAB_PROJECT}>
+                      <ContextMenuRadioItem
+                        value={UNASSIGNED_QUERY_TAB_PROJECT}
+                      >
                         Unassigned
                       </ContextMenuRadioItem>
                       {projects.map((project) => (
-                        <ContextMenuRadioItem key={project.id} value={project.id}>
+                        <ContextMenuRadioItem
+                          key={project.id}
+                          value={project.id}
+                        >
                           {project.name}
                         </ContextMenuRadioItem>
                       ))}

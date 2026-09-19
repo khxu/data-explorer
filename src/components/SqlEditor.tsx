@@ -6,7 +6,10 @@ import {
   placeholder as phPlugin,
 } from "@codemirror/view";
 import { Compartment, EditorState } from "@codemirror/state";
-import { schemaCompletionSource, type SQLNamespace } from "@codemirror/lang-sql";
+import {
+  schemaCompletionSource,
+  type SQLNamespace,
+} from "@codemirror/lang-sql";
 import { DuckDBDialect } from "@marimo-team/codemirror-sql/dialects";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { usePersistedNumber } from "@/hooks/usePersistedNumber";
@@ -69,7 +72,7 @@ export function SqlEditor({
 
   const completionSchema = useMemo(
     () => buildCompletionSchema(dataSourceSchemas),
-    [dataSourceSchemas]
+    [dataSourceSchemas],
   );
   const sqlSupport = useMemo(
     () =>
@@ -81,7 +84,7 @@ export function SqlEditor({
           }),
         }),
       ]),
-    [completionSchema]
+    [completionSchema],
   );
   const sqlSupportRef = useRef(sqlSupport);
   sqlSupportRef.current = sqlSupport;
@@ -159,7 +162,8 @@ export function SqlEditor({
         },
         ".cm-scroller": {
           overflow: "auto",
-          fontFamily: "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace",
+          fontFamily:
+            "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace",
         },
         ".cm-content": {
           padding: "8px 0",
@@ -295,45 +299,48 @@ export function SqlEditor({
   const [height, setHeight] = usePersistedNumber(
     SQL_EDITOR_HEIGHT_STORAGE_KEY,
     DEFAULT_SQL_EDITOR_HEIGHT,
-    SQL_EDITOR_HEIGHT_BOUNDS
+    SQL_EDITOR_HEIGHT_BOUNDS,
   );
   const resizing = useRef(false);
 
-  const handleResizeDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    resizing.current = true;
-    const startY = e.clientY;
-    const startH = height;
-    const editorTop = containerRef.current?.getBoundingClientRect().top ?? 0;
-    const maxHeight = Math.max(
-      SQL_EDITOR_HEIGHT_BOUNDS.min,
-      Math.min(
-        window.innerHeight - editorTop - SQL_EDITOR_BOTTOM_GAP,
-        SQL_EDITOR_HEIGHT_BOUNDS.max
-      )
-    );
-
-    const onMove = (ev: MouseEvent) => {
-      if (!resizing.current) return;
-      setHeight(
-        Math.max(
-          SQL_EDITOR_HEIGHT_BOUNDS.min,
-          Math.min(startH + ev.clientY - startY, maxHeight)
-        )
+  const handleResizeDown = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      resizing.current = true;
+      const startY = e.clientY;
+      const startH = height;
+      const editorTop = containerRef.current?.getBoundingClientRect().top ?? 0;
+      const maxHeight = Math.max(
+        SQL_EDITOR_HEIGHT_BOUNDS.min,
+        Math.min(
+          window.innerHeight - editorTop - SQL_EDITOR_BOTTOM_GAP,
+          SQL_EDITOR_HEIGHT_BOUNDS.max,
+        ),
       );
-    };
-    const onUp = () => {
-      resizing.current = false;
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-    };
-    document.body.style.cursor = "row-resize";
-    document.body.style.userSelect = "none";
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup", onUp);
-  }, [height]);
+
+      const onMove = (ev: MouseEvent) => {
+        if (!resizing.current) return;
+        setHeight(
+          Math.max(
+            SQL_EDITOR_HEIGHT_BOUNDS.min,
+            Math.min(startH + ev.clientY - startY, maxHeight),
+          ),
+        );
+      };
+      const onUp = () => {
+        resizing.current = false;
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+      };
+      document.body.style.cursor = "row-resize";
+      document.body.style.userSelect = "none";
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    },
+    [height],
+  );
 
   return (
     <div className={className}>
@@ -348,7 +355,9 @@ export function SqlEditor({
   );
 }
 
-function buildCompletionSchema(dataSourceSchemas: DataSourceSchema[]): SQLNamespace {
+function buildCompletionSchema(
+  dataSourceSchemas: DataSourceSchema[],
+): SQLNamespace {
   const schema: Record<string, Completion[]> = {};
   for (const dataSource of dataSourceSchemas) {
     schema[dataSource.name] = dataSource.columns.map((column) => ({
@@ -361,7 +370,9 @@ function buildCompletionSchema(dataSourceSchemas: DataSourceSchema[]): SQLNamesp
 }
 
 function disableSearchInputTextTransforms(view: EditorView) {
-  const inputs = view.dom.querySelectorAll<HTMLInputElement>(".cm-search input.cm-textfield");
+  const inputs = view.dom.querySelectorAll<HTMLInputElement>(
+    ".cm-search input.cm-textfield",
+  );
   for (const input of inputs) {
     input.setAttribute("autocapitalize", "none");
     input.setAttribute("autocorrect", "off");

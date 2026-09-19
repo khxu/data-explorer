@@ -45,7 +45,10 @@ function loadPersistedModel() {
   if (typeof window === "undefined") return DEFAULT_MODEL_VALUE;
 
   try {
-    return window.localStorage.getItem(AI_ASSIST_MODEL_STORAGE_KEY) ?? DEFAULT_MODEL_VALUE;
+    return (
+      window.localStorage.getItem(AI_ASSIST_MODEL_STORAGE_KEY) ??
+      DEFAULT_MODEL_VALUE
+    );
   } catch (error) {
     console.warn("Unable to load persisted AI Assist model", error);
     return DEFAULT_MODEL_VALUE;
@@ -57,14 +60,18 @@ function loadPersistedDataSourceIds(dataSources: DataSource[]) {
   if (typeof window === "undefined") return allIds;
 
   try {
-    const storedValue = window.localStorage.getItem(AI_ASSIST_TABLES_STORAGE_KEY);
+    const storedValue = window.localStorage.getItem(
+      AI_ASSIST_TABLES_STORAGE_KEY,
+    );
     if (storedValue === null) return allIds;
 
     const parsed = JSON.parse(storedValue);
     if (!Array.isArray(parsed)) return allIds;
 
     const availableIds = new Set(allIds);
-    return parsed.filter((id): id is string => typeof id === "string" && availableIds.has(id));
+    return parsed.filter(
+      (id): id is string => typeof id === "string" && availableIds.has(id),
+    );
   } catch (error) {
     console.warn("Unable to load persisted AI Assist tables", error);
     return allIds;
@@ -86,9 +93,11 @@ export function AiSqlAssistant({
   const [activity, setActivity] = useState<string[]>([]);
   const [reasoning, setReasoning] = useState("");
   const [tokenUsage, setTokenUsage] = useState<string | null>(null);
-  const [draftTokenUsage, setDraftTokenUsage] = useState<AiTokenUsage | null>(null);
-  const [selectedDataSourceIds, setSelectedDataSourceIds] = useState<string[]>(() =>
-    loadPersistedDataSourceIds(dataSources)
+  const [draftTokenUsage, setDraftTokenUsage] = useState<AiTokenUsage | null>(
+    null,
+  );
+  const [selectedDataSourceIds, setSelectedDataSourceIds] = useState<string[]>(
+    () => loadPersistedDataSourceIds(dataSources),
   );
   const [loadingModels, setLoadingModels] = useState(false);
   const [drafting, setDrafting] = useState(false);
@@ -98,15 +107,18 @@ export function AiSqlAssistant({
   const selectedDataSources = useMemo(
     () =>
       dataSources.filter(
-        (source) => source.available && selectedDataSourceIds.includes(source.id)
+        (source) =>
+          source.available && selectedDataSourceIds.includes(source.id),
       ),
-    [dataSources, selectedDataSourceIds]
+    [dataSources, selectedDataSourceIds],
   );
 
   useEffect(() => {
     setSelectedDataSourceIds((previousIds) => {
       const availableIds = new Set(
-        dataSources.filter((source) => source.available).map((source) => source.id)
+        dataSources
+          .filter((source) => source.available)
+          .map((source) => source.id),
       );
       return previousIds.filter((id) => availableIds.has(id));
     });
@@ -124,7 +136,7 @@ export function AiSqlAssistant({
     try {
       window.localStorage.setItem(
         AI_ASSIST_TABLES_STORAGE_KEY,
-        JSON.stringify(selectedDataSourceIds)
+        JSON.stringify(selectedDataSourceIds),
       );
     } catch (error) {
       console.warn("Unable to save persisted AI Assist tables", error);
@@ -182,7 +194,7 @@ export function AiSqlAssistant({
 
       if (event.payload.kind === "reasoning" && event.payload.delta) {
         setReasoning((current) =>
-          (current + event.payload.delta).slice(-MAX_REASONING_CHARS)
+          (current + event.payload.delta).slice(-MAX_REASONING_CHARS),
         );
         return;
       }
@@ -195,14 +207,18 @@ export function AiSqlAssistant({
           Math.round(event.payload.cache_write_tokens ?? 0);
         const cachedLabel =
           cached > 0 ? `, ${cached.toLocaleString()} cached` : "";
-        setTokenUsage(`Tokens: ${input.toLocaleString()} in, ${output.toLocaleString()} out${cachedLabel}`);
+        setTokenUsage(
+          `Tokens: ${input.toLocaleString()} in, ${output.toLocaleString()} out${cachedLabel}`,
+        );
       }
 
       if (event.payload.message) {
-        setActivity((current) => [
-          event.payload.message as string,
-          ...current,
-        ].slice(0, MAX_ACTIVITY_ITEMS));
+        setActivity((current) =>
+          [event.payload.message as string, ...current].slice(
+            0,
+            MAX_ACTIVITY_ITEMS,
+          ),
+        );
       }
     }).then((unlisten) => {
       if (cancelled) {
@@ -245,9 +261,10 @@ export function AiSqlAssistant({
         selectedModel === DEFAULT_MODEL_VALUE ? null : selectedModel,
         selectedModel === DEFAULT_MODEL_VALUE
           ? "Copilot default model"
-          : models.find((model) => model.id === selectedModel)?.name ?? selectedModel,
+          : (models.find((model) => model.id === selectedModel)?.name ??
+              selectedModel),
         currentSql,
-        selectedDataSourceIds
+        selectedDataSourceIds,
       );
       setDraft(response.sql);
       setDraftModel(formatModelLabel(response.model_used, models));
@@ -272,24 +289,37 @@ export function AiSqlAssistant({
             Uses selected schemas and first 2 sample rows
           </p>
         </div>
-        <Button variant="ghost" size="sm" className="h-7 px-2" onClick={onClose}>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 px-2"
+          onClick={onClose}
+        >
           ✕
         </Button>
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-3">
         <div className="space-y-1.5">
-          <label className="text-xs font-medium text-muted-foreground">Model</label>
+          <label className="text-xs font-medium text-muted-foreground">
+            Model
+          </label>
           <Select
             value={selectedModel}
             onValueChange={setSelectedModel}
             disabled={loadingModels || drafting}
           >
             <SelectTrigger className="w-full">
-              <SelectValue placeholder={loadingModels ? "Loading models..." : "Choose model"} />
+              <SelectValue
+                placeholder={
+                  loadingModels ? "Loading models..." : "Choose model"
+                }
+              />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={DEFAULT_MODEL_VALUE}>Copilot default</SelectItem>
+              <SelectItem value={DEFAULT_MODEL_VALUE}>
+                Copilot default
+              </SelectItem>
               {models.map((model) => (
                 <SelectItem key={model.id} value={model.id}>
                   {model.name || model.id}
@@ -302,8 +332,12 @@ export function AiSqlAssistant({
         <div className="space-y-2 rounded-md border bg-background p-2">
           <div className="flex items-center justify-between gap-2">
             <div className="text-xs text-muted-foreground">
-              Context: {selectedDataSources.length} of {dataSources.filter((source) => source.available).length} available table
-              {dataSources.filter((source) => source.available).length === 1 ? "" : "s"}
+              Context: {selectedDataSources.length} of{" "}
+              {dataSources.filter((source) => source.available).length}{" "}
+              available table
+              {dataSources.filter((source) => source.available).length === 1
+                ? ""
+                : "s"}
             </div>
             <div className="flex gap-1">
               <Button
@@ -315,7 +349,7 @@ export function AiSqlAssistant({
                   setSelectedDataSourceIds(
                     dataSources
                       .filter((source) => source.available)
-                      .map((source) => source.id)
+                      .map((source) => source.id),
                   )
                 }
                 disabled={drafting || dataSources.length === 0}
@@ -349,14 +383,16 @@ export function AiSqlAssistant({
                     setSelectedDataSourceIds((previousIds) =>
                       event.target.checked
                         ? [...previousIds, source.id]
-                        : previousIds.filter((id) => id !== source.id)
+                        : previousIds.filter((id) => id !== source.id),
                     );
                   }}
                 />
                 <span className="min-w-0 flex-1 truncate" title={source.name}>
                   {source.name}
                 </span>
-                <span className="text-muted-foreground">{source.file_format}</span>
+                <span className="text-muted-foreground">
+                  {source.file_format}
+                </span>
                 {!source.available && (
                   <span className="text-amber-600">unavailable</span>
                 )}
@@ -370,7 +406,8 @@ export function AiSqlAssistant({
           </div>
           {selectedDataSources.length > 0 && (
             <p className="text-xs text-muted-foreground">
-              Selected: {selectedDataSources.map((source) => source.name).join(", ")}
+              Selected:{" "}
+              {selectedDataSources.map((source) => source.name).join(", ")}
             </p>
           )}
         </div>
@@ -432,7 +469,9 @@ export function AiSqlAssistant({
                 </pre>
               </div>
             )}
-            {tokenUsage && <p className="text-muted-foreground">{tokenUsage}</p>}
+            {tokenUsage && (
+              <p className="text-muted-foreground">{tokenUsage}</p>
+            )}
           </div>
         )}
 
@@ -446,12 +485,20 @@ export function AiSqlAssistant({
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <div>
-                <label className="text-xs font-medium text-muted-foreground">Draft</label>
+                <label className="text-xs font-medium text-muted-foreground">
+                  Draft
+                </label>
                 {draftModel && (
-                  <p className="text-xs text-muted-foreground">Generated with {draftModel}</p>
+                  <p className="text-xs text-muted-foreground">
+                    Generated with {draftModel}
+                  </p>
                 )}
               </div>
-              <Button size="sm" variant="outline" onClick={() => onApplySql(draft)}>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => onApplySql(draft)}
+              >
                 Insert
               </Button>
             </div>
@@ -460,14 +507,20 @@ export function AiSqlAssistant({
             </pre>
             {draftTokenUsage && (
               <div className="rounded-md border bg-background p-2 text-xs">
-                <p className="mb-1 font-medium text-muted-foreground">Token usage</p>
+                <p className="mb-1 font-medium text-muted-foreground">
+                  Token usage
+                </p>
                 <div className="grid grid-cols-2 gap-1 text-muted-foreground">
-                  {formatTokenUsageRows(draftTokenUsage).map(([label, value]) => (
-                    <div key={label} className="flex justify-between gap-2">
-                      <span>{label}</span>
-                      <span className="font-mono text-foreground">{value}</span>
-                    </div>
-                  ))}
+                  {formatTokenUsageRows(draftTokenUsage).map(
+                    ([label, value]) => (
+                      <div key={label} className="flex justify-between gap-2">
+                        <span>{label}</span>
+                        <span className="font-mono text-foreground">
+                          {value}
+                        </span>
+                      </div>
+                    ),
+                  )}
                 </div>
               </div>
             )}

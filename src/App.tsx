@@ -17,71 +17,78 @@ const QUERY_TABS_WIDTH_BOUNDS = { min: 180, max: 480 };
 const DEFAULT_QUERY_TABS_WIDTH = 240;
 
 function AppContent() {
-  const { error, setError, activeTab, setActiveTab, refreshHistory } = useAppState();
+  const { error, setError, activeTab, setActiveTab, refreshHistory } =
+    useAppState();
   const [sidebarWidth, setSidebarWidth] = usePersistedNumber(
     SIDEBAR_WIDTH_STORAGE_KEY,
     DEFAULT_SIDEBAR_WIDTH,
-    SIDEBAR_WIDTH_BOUNDS
+    SIDEBAR_WIDTH_BOUNDS,
   );
   const [queryTabsWidth, setQueryTabsWidth] = usePersistedNumber(
     QUERY_TABS_WIDTH_STORAGE_KEY,
     DEFAULT_QUERY_TABS_WIDTH,
-    QUERY_TABS_WIDTH_BOUNDS
+    QUERY_TABS_WIDTH_BOUNDS,
   );
   const isResizingSidebar = useRef(false);
   const isResizingQueryTabs = useRef(false);
 
-  const handleSidebarMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    isResizingSidebar.current = true;
+  const handleSidebarMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      isResizingSidebar.current = true;
 
-    const onMouseMove = (ev: MouseEvent) => {
-      if (!isResizingSidebar.current) return;
-      const newWidth = Math.min(
-        Math.max(ev.clientX, SIDEBAR_WIDTH_BOUNDS.min),
-        SIDEBAR_WIDTH_BOUNDS.max
-      );
-      setSidebarWidth(newWidth);
-    };
+      const onMouseMove = (ev: MouseEvent) => {
+        if (!isResizingSidebar.current) return;
+        const newWidth = Math.min(
+          Math.max(ev.clientX, SIDEBAR_WIDTH_BOUNDS.min),
+          SIDEBAR_WIDTH_BOUNDS.max,
+        );
+        setSidebarWidth(newWidth);
+      };
 
-    const onMouseUp = () => {
-      isResizingSidebar.current = false;
-      document.removeEventListener("mousemove", onMouseMove);
-      document.removeEventListener("mouseup", onMouseUp);
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-    };
+      const onMouseUp = () => {
+        isResizingSidebar.current = false;
+        document.removeEventListener("mousemove", onMouseMove);
+        document.removeEventListener("mouseup", onMouseUp);
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+      };
 
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-    document.addEventListener("mousemove", onMouseMove);
-    document.addEventListener("mouseup", onMouseUp);
-  }, [setSidebarWidth]);
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+      document.addEventListener("mousemove", onMouseMove);
+      document.addEventListener("mouseup", onMouseUp);
+    },
+    [setSidebarWidth],
+  );
 
-  const handleQueryTabsMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    isResizingQueryTabs.current = true;
-    const startX = e.clientX;
-    const startWidth = queryTabsWidth;
+  const handleQueryTabsMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      isResizingQueryTabs.current = true;
+      const startX = e.clientX;
+      const startWidth = queryTabsWidth;
 
-    const onMouseMove = (ev: MouseEvent) => {
-      if (!isResizingQueryTabs.current) return;
-      setQueryTabsWidth(startWidth + ev.clientX - startX);
-    };
+      const onMouseMove = (ev: MouseEvent) => {
+        if (!isResizingQueryTabs.current) return;
+        setQueryTabsWidth(startWidth + ev.clientX - startX);
+      };
 
-    const onMouseUp = () => {
-      isResizingQueryTabs.current = false;
-      document.removeEventListener("mousemove", onMouseMove);
-      document.removeEventListener("mouseup", onMouseUp);
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-    };
+      const onMouseUp = () => {
+        isResizingQueryTabs.current = false;
+        document.removeEventListener("mousemove", onMouseMove);
+        document.removeEventListener("mouseup", onMouseUp);
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+      };
 
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-    document.addEventListener("mousemove", onMouseMove);
-    document.addEventListener("mouseup", onMouseUp);
-  }, [queryTabsWidth, setQueryTabsWidth]);
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+      document.addEventListener("mousemove", onMouseMove);
+      document.addEventListener("mouseup", onMouseUp);
+    },
+    [queryTabsWidth, setQueryTabsWidth],
+  );
 
   return (
     <div className="flex h-screen w-screen overflow-hidden">
@@ -113,15 +120,17 @@ function AppContent() {
           </div>
         )}
 
-        <Tabs value={activeTab} onValueChange={(v) => {
-          setActiveTab(v);
-          if (v === "history") refreshHistory();
-        }} className="flex-1 flex flex-col min-h-0">
+        <Tabs
+          value={activeTab}
+          onValueChange={(v) => {
+            setActiveTab(v);
+            if (v === "history") refreshHistory();
+          }}
+          className="flex-1 flex flex-col min-h-0"
+        >
           <TabsList className="mx-3 mt-2 w-fit">
             <TabsTrigger value="query">Query</TabsTrigger>
-            <TabsTrigger value="history">
-              History
-            </TabsTrigger>
+            <TabsTrigger value="history">History</TabsTrigger>
             <TabsTrigger value="llm-runs">LLM Runs</TabsTrigger>
           </TabsList>
           <TabsContent value="query" className="flex-1 min-h-0 mt-0 flex">

@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from "react";
+import {
+  useCallback,
+  useEffect,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 
 interface PersistedNumberOptions {
   min: number;
@@ -12,7 +18,7 @@ function clamp(value: number, { min, max }: PersistedNumberOptions) {
 function parsePersistedNumber(
   storedValue: string | null,
   fallback: number,
-  options: PersistedNumberOptions
+  options: PersistedNumberOptions,
 ) {
   if (storedValue === null) return fallback;
 
@@ -25,13 +31,17 @@ function parsePersistedNumber(
 export function usePersistedNumber(
   key: string,
   fallback: number,
-  options: PersistedNumberOptions
+  options: PersistedNumberOptions,
 ): [number, Dispatch<SetStateAction<number>>] {
   const [value, setValue] = useState(() => {
     if (typeof window === "undefined") return fallback;
 
     try {
-      return parsePersistedNumber(window.localStorage.getItem(key), fallback, options);
+      return parsePersistedNumber(
+        window.localStorage.getItem(key),
+        fallback,
+        options,
+      );
     } catch (error) {
       console.warn(`Unable to load persisted number for "${key}"`, error);
       return fallback;
@@ -61,11 +71,11 @@ export function usePersistedNumber(
       setValue((currentValue) =>
         clamp(
           typeof nextValue === "function" ? nextValue(currentValue) : nextValue,
-          options
-        )
+          options,
+        ),
       );
     },
-    [options]
+    [options],
   );
 
   return [value, setPersistedValue];

@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
 import { listen } from "@tauri-apps/api/event";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -69,7 +76,9 @@ export function LlmRunsPanel() {
 
   useEffect(() => {
     refresh().catch((e) => setError(String(e)));
-    listAiModels().then(setModels).catch((e) => setError(String(e)));
+    listAiModels()
+      .then(setModels)
+      .catch((e) => setError(String(e)));
   }, [refresh]);
 
   useEffect(() => {
@@ -111,7 +120,9 @@ export function LlmRunsPanel() {
     ...unknownPlaceholders(form.user_prompt, availableColumns),
   ];
   const selectedRun = runs.find((run) => run.id === selectedRunId) ?? null;
-  const activeRun = activeRunId ? runs.find((run) => run.id === activeRunId) : null;
+  const activeRun = activeRunId
+    ? runs.find((run) => run.id === activeRunId)
+    : null;
 
   async function loadResults(runId: string) {
     setResults(await getLlmRunResults(runId));
@@ -125,14 +136,16 @@ export function LlmRunsPanel() {
         form.data_source_id ?? null,
         form.sql_text ?? null,
         [],
-        25
+        25,
       );
       setPreview(nextPreview);
       setForm((current) => ({
         ...current,
         selected_columns:
           current.selected_columns.length > 0
-            ? current.selected_columns.filter((column) => nextPreview.columns.includes(column))
+            ? current.selected_columns.filter((column) =>
+                nextPreview.columns.includes(column),
+              )
             : nextPreview.columns,
       }));
     } catch (e) {
@@ -174,7 +187,9 @@ export function LlmRunsPanel() {
     }
   }
 
-  async function handleRunAction(action: "pause" | "cancel" | "resume" | "retry") {
+  async function handleRunAction(
+    action: "pause" | "cancel" | "resume" | "retry",
+  ) {
     const runId = activeRunId ?? selectedRunId;
     if (!runId) return;
     setError(null);
@@ -231,12 +246,23 @@ export function LlmRunsPanel() {
       <div className="w-[26rem] flex-shrink-0 border-r overflow-y-auto p-3 space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold">LLM Runs</h2>
-          <Button size="sm" variant="outline" onClick={() => { setForm(DEFAULT_FORM); setPreview(null); }}>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              setForm(DEFAULT_FORM);
+              setPreview(null);
+            }}
+          >
             New
           </Button>
         </div>
 
-        {error && <div className="rounded bg-destructive/10 p-2 text-xs text-destructive">{error}</div>}
+        {error && (
+          <div className="rounded bg-destructive/10 p-2 text-xs text-destructive">
+            {error}
+          </div>
+        )}
 
         <div className="space-y-2">
           <label className="text-xs font-medium">Name</label>
@@ -271,7 +297,10 @@ export function LlmRunsPanel() {
                 className="w-full rounded-md border bg-background px-2 py-1.5 text-sm"
                 value={form.data_source_id ?? ""}
                 onChange={(event) => {
-                  setForm({ ...form, data_source_id: event.target.value || null });
+                  setForm({
+                    ...form,
+                    data_source_id: event.target.value || null,
+                  });
                   setPreview(null);
                 }}
               >
@@ -282,7 +311,8 @@ export function LlmRunsPanel() {
                     value={source.id}
                     disabled={!source.available}
                   >
-                    {source.name}{source.available ? "" : " (unavailable)"}
+                    {source.name}
+                    {source.available ? "" : " (unavailable)"}
                   </option>
                 ))}
               </select>
@@ -295,7 +325,9 @@ export function LlmRunsPanel() {
             <label className="text-xs font-medium">SQL input</label>
             <Textarea
               value={form.sql_text ?? ""}
-              onChange={(event) => setForm({ ...form, sql_text: event.target.value })}
+              onChange={(event) =>
+                setForm({ ...form, sql_text: event.target.value })
+              }
               className="min-h-24 font-mono text-xs"
               placeholder="SELECT id, text FROM my_table LIMIT 100"
             />
@@ -308,7 +340,9 @@ export function LlmRunsPanel() {
 
         {preview && (
           <div className="space-y-2 rounded-md border p-2">
-            <div className="text-xs font-medium">Columns available to prompts</div>
+            <div className="text-xs font-medium">
+              Columns available to prompts
+            </div>
             <div className="max-h-36 overflow-y-auto space-y-1">
               {preview.columns.map((column) => (
                 <label key={column} className="flex items-center gap-2 text-xs">
@@ -320,7 +354,9 @@ export function LlmRunsPanel() {
                         ...current,
                         selected_columns: event.target.checked
                           ? [...current.selected_columns, column]
-                          : current.selected_columns.filter((value) => value !== column),
+                          : current.selected_columns.filter(
+                              (value) => value !== column,
+                            ),
                       }));
                     }}
                   />
@@ -358,7 +394,8 @@ export function LlmRunsPanel() {
         />
         {promptWarnings.length > 0 && (
           <p className="text-xs text-amber-600">
-            Unknown placeholders: {Array.from(new Set(promptWarnings)).join(", ")}
+            Unknown placeholders:{" "}
+            {Array.from(new Set(promptWarnings)).join(", ")}
           </p>
         )}
 
@@ -386,8 +423,12 @@ export function LlmRunsPanel() {
         </div>
 
         <div className="flex gap-2">
-          <Button size="sm" onClick={handleSave} disabled={busy}>Save</Button>
-          <Button size="sm" onClick={handleRun} disabled={busy}>Run</Button>
+          <Button size="sm" onClick={handleSave} disabled={busy}>
+            Save
+          </Button>
+          <Button size="sm" onClick={handleRun} disabled={busy}>
+            Run
+          </Button>
           <Button
             size="sm"
             variant="outline"
@@ -398,14 +439,28 @@ export function LlmRunsPanel() {
           </Button>
           {(activeRun?.status === "running" || busy) && (
             <>
-              <Button size="sm" variant="outline" onClick={() => void handleRunAction("pause")}>Pause</Button>
-              <Button size="sm" variant="destructive" onClick={() => void handleRunAction("cancel")}>Cancel</Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void handleRunAction("pause")}
+              >
+                Pause
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => void handleRunAction("cancel")}
+              >
+                Cancel
+              </Button>
             </>
           )}
         </div>
 
         <div className="space-y-2">
-          <h3 className="text-xs font-semibold text-muted-foreground">Saved experiments</h3>
+          <h3 className="text-xs font-semibold text-muted-foreground">
+            Saved experiments
+          </h3>
           {experiments.map((experiment) => (
             <div key={experiment.id} className="rounded-md border p-2 text-xs">
               <div className="flex items-center justify-between gap-2">
@@ -418,11 +473,19 @@ export function LlmRunsPanel() {
                 >
                   {experiment.name}
                 </button>
-                <Button size="sm" variant="ghost" className="h-6 px-2" onClick={() => void handleDeleteExperiment(experiment.id)}>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 px-2"
+                  onClick={() => void handleDeleteExperiment(experiment.id)}
+                >
                   Delete
                 </Button>
               </div>
-              <div className="text-muted-foreground">{experiment.models.length} model{experiment.models.length === 1 ? "" : "s"}</div>
+              <div className="text-muted-foreground">
+                {experiment.models.length} model
+                {experiment.models.length === 1 ? "" : "s"}
+              </div>
             </div>
           ))}
         </div>
@@ -432,11 +495,11 @@ export function LlmRunsPanel() {
         <div className="border-b p-3 space-y-2">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold">Run history</h3>
-            <Button size="sm" variant="outline" onClick={() => void refresh()}>Refresh</Button>
+            <Button size="sm" variant="outline" onClick={() => void refresh()}>
+              Refresh
+            </Button>
           </div>
-          {progress && (
-            <ProgressSummary progress={progress} />
-          )}
+          {progress && <ProgressSummary progress={progress} />}
           <div className="flex gap-2 overflow-x-auto pb-1">
             {runs.map((run) => (
               <button
@@ -444,7 +507,9 @@ export function LlmRunsPanel() {
                 className={`rounded-md border px-2 py-1 text-left text-xs ${run.id === selectedRunId ? "bg-accent" : "bg-background"}`}
                 onClick={() => setSelectedRunId(run.id)}
               >
-                <div className="font-medium whitespace-nowrap">{run.experiment_name}</div>
+                <div className="font-medium whitespace-nowrap">
+                  {run.experiment_name}
+                </div>
                 <div className="text-muted-foreground whitespace-nowrap">
                   {run.status} · {run.completed_count}/{run.total_count}
                   {run.failed_count ? ` · ${run.failed_count} failed` : ""}
@@ -455,19 +520,40 @@ export function LlmRunsPanel() {
           {selectedRun && (
             <div className="flex gap-2">
               {selectedRun.status === "paused" && (
-                <Button size="sm" onClick={() => void handleRunAction("resume")}>Resume</Button>
+                <Button
+                  size="sm"
+                  onClick={() => void handleRunAction("resume")}
+                >
+                  Resume
+                </Button>
               )}
               {selectedRun.failed_count > 0 && (
-                <Button size="sm" variant="outline" onClick={() => void handleRunAction("retry")}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void handleRunAction("retry")}
+                >
                   Retry failed
                 </Button>
               )}
               {results.length > 0 && (
                 <>
-                  <Button size="sm" variant="outline" onClick={() => exportResultsFile(selectedRun, results, "csv")}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      exportResultsFile(selectedRun, results, "csv")
+                    }
+                  >
                     Export CSV
                   </Button>
-                  <Button size="sm" variant="outline" onClick={() => exportResultsFile(selectedRun, results, "json")}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      exportResultsFile(selectedRun, results, "json")
+                    }
+                  >
                     Export JSON
                   </Button>
                 </>
@@ -520,10 +606,15 @@ function ProgressSummary({ progress }: { progress: LlmRunProgress }) {
     <div className="rounded-md border p-2 text-xs">
       <div className="flex items-center justify-between">
         <span>{progress.message ?? progress.status}</span>
-        <span>{completed}/{total} · {pct}%</span>
+        <span>
+          {completed}/{total} · {pct}%
+        </span>
       </div>
       <div className="mt-1 h-1.5 rounded bg-muted">
-        <div className="h-full rounded bg-primary" style={{ width: `${pct}%` }} />
+        <div
+          className="h-full rounded bg-primary"
+          style={{ width: `${pct}%` }}
+        />
       </div>
       {progress.model && (
         <div className="mt-1 text-muted-foreground">
@@ -539,7 +630,11 @@ function ResultsTable({ results }: { results: LlmRunResult[] }) {
   const [detail, setDetail] = useState<LlmRunResult | null>(null);
 
   if (results.length === 0) {
-    return <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">No run results selected</div>;
+    return (
+      <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">
+        No run results selected
+      </div>
+    );
   }
 
   return (
@@ -549,27 +644,46 @@ function ResultsTable({ results }: { results: LlmRunResult[] }) {
           <tr>
             <th className="border px-2 py-1 text-left">Row</th>
             {pivot.sourceColumns.map((column) => (
-              <th key={column} className="border px-2 py-1 text-left">{column}</th>
+              <th key={column} className="border px-2 py-1 text-left">
+                {column}
+              </th>
             ))}
             {pivot.models.map((model) => (
-              <th key={model} className="border px-2 py-1 text-left">{model}</th>
+              <th key={model} className="border px-2 py-1 text-left">
+                {model}
+              </th>
             ))}
           </tr>
         </thead>
         <tbody>
           {pivot.rows.map((row) => (
             <tr key={row.rowIndex}>
-              <td className="border px-2 py-1 text-muted-foreground">{row.rowIndex}</td>
+              <td className="border px-2 py-1 text-muted-foreground">
+                {row.rowIndex}
+              </td>
               {pivot.sourceColumns.map((column) => (
-                <td key={column} className="max-w-48 truncate border px-2 py-1">{formatValue(row.source[column])}</td>
+                <td key={column} className="max-w-48 truncate border px-2 py-1">
+                  {formatValue(row.source[column])}
+                </td>
               ))}
               {pivot.models.map((model) => {
                 const result = row.resultsByModel[model];
                 return (
-                  <td key={model} className="max-w-72 truncate border px-2 py-1">
+                  <td
+                    key={model}
+                    className="max-w-72 truncate border px-2 py-1"
+                  >
                     {result ? (
-                      <button className="text-left hover:underline" onClick={() => setDetail(result)}>
-                        {result.status === "success" ? "✓" : result.status === "error" ? "✗" : "…"} {result.output ?? result.error ?? result.status}
+                      <button
+                        className="text-left hover:underline"
+                        onClick={() => setDetail(result)}
+                      >
+                        {result.status === "success"
+                          ? "✓"
+                          : result.status === "error"
+                            ? "✗"
+                            : "…"}{" "}
+                        {result.output ?? result.error ?? result.status}
                       </button>
                     ) : (
                       <span className="text-muted-foreground">—</span>
@@ -585,14 +699,21 @@ function ResultsTable({ results }: { results: LlmRunResult[] }) {
       {detail && (
         <div className="fixed inset-x-6 bottom-6 z-40 max-h-[45vh] overflow-auto rounded-lg border bg-popover p-3 shadow-lg">
           <div className="mb-2 flex items-center justify-between gap-2">
-            <div className="text-sm font-semibold">Row {detail.row_index} · {detail.model}</div>
-            <Button size="sm" variant="ghost" onClick={() => setDetail(null)}>Close</Button>
+            <div className="text-sm font-semibold">
+              Row {detail.row_index} · {detail.model}
+            </div>
+            <Button size="sm" variant="ghost" onClick={() => setDetail(null)}>
+              Close
+            </Button>
           </div>
           <div className="grid gap-2 md:grid-cols-2">
             <DetailBlock label="System prompt" value={detail.input_system} />
             <DetailBlock label="User prompt" value={detail.input_user} />
           </div>
-          <DetailBlock label={detail.status === "error" ? "Error" : "Output"} value={detail.output ?? detail.error} />
+          <DetailBlock
+            label={detail.status === "error" ? "Error" : "Output"}
+            value={detail.output ?? detail.error}
+          />
           <div className="text-xs text-muted-foreground">
             Status: {detail.status}
             {detail.latency_ms != null ? ` · ${detail.latency_ms}ms` : ""}
@@ -603,11 +724,19 @@ function ResultsTable({ results }: { results: LlmRunResult[] }) {
   );
 }
 
-function DetailBlock({ label, value }: { label: string; value: string | null }) {
+function DetailBlock({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | null;
+}) {
   return (
     <div className="space-y-1">
       <div className="text-xs font-medium text-muted-foreground">{label}</div>
-      <pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded bg-muted/50 p-2 text-xs">{value ?? ""}</pre>
+      <pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded bg-muted/50 p-2 text-xs">
+        {value ?? ""}
+      </pre>
     </div>
   );
 }
@@ -629,13 +758,20 @@ function experimentToDraft(experiment: LlmExperiment): LlmExperimentDraft {
 function buildPivot(results: LlmRunResult[]) {
   const models = Array.from(new Set(results.map((result) => result.model)));
   const sourceColumns = Array.from(
-    new Set(results.flatMap((result) => Object.keys(parseSourceRow(result.source_row))))
+    new Set(
+      results.flatMap((result) =>
+        Object.keys(parseSourceRow(result.source_row)),
+      ),
+    ),
   );
-  const rowsByIndex = new Map<number, {
-    rowIndex: number;
-    source: Record<string, unknown>;
-    resultsByModel: Record<string, LlmRunResult>;
-  }>();
+  const rowsByIndex = new Map<
+    number,
+    {
+      rowIndex: number;
+      source: Record<string, unknown>;
+      resultsByModel: Record<string, LlmRunResult>;
+    }
+  >();
 
   for (const result of results) {
     const source = parseSourceRow(result.source_row);
@@ -651,14 +787,18 @@ function buildPivot(results: LlmRunResult[]) {
   return {
     models,
     sourceColumns,
-    rows: Array.from(rowsByIndex.values()).sort((a, b) => a.rowIndex - b.rowIndex),
+    rows: Array.from(rowsByIndex.values()).sort(
+      (a, b) => a.rowIndex - b.rowIndex,
+    ),
   };
 }
 
 function parseSourceRow(value: string): Record<string, unknown> {
   try {
     const parsed = JSON.parse(value);
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed
+      : {};
   } catch {
     return {};
   }
@@ -669,10 +809,17 @@ function formatValue(value: unknown) {
   return typeof value === "string" ? value : JSON.stringify(value);
 }
 
-function exportResultsFile(run: LlmRun, results: LlmRunResult[], format: "csv" | "json") {
+function exportResultsFile(
+  run: LlmRun,
+  results: LlmRunResult[],
+  format: "csv" | "json",
+) {
   const pivot = buildPivot(results);
   const rows = pivot.rows.map((row) => {
-    const outputRow: Record<string, unknown> = { row_index: row.rowIndex, ...row.source };
+    const outputRow: Record<string, unknown> = {
+      row_index: row.rowIndex,
+      ...row.source,
+    };
     for (const model of pivot.models) {
       const result = row.resultsByModel[model];
       outputRow[`${model}_status`] = result?.status ?? "";
@@ -692,7 +839,9 @@ function exportResultsFile(run: LlmRun, results: LlmRunResult[], format: "csv" |
   const columns = rows.length > 0 ? Object.keys(rows[0]) : ["row_index"];
   const csv = [
     columns.join(","),
-    ...rows.map((row) => columns.map((column) => csvCell(row[column])).join(",")),
+    ...rows.map((row) =>
+      columns.map((column) => csvCell(row[column])).join(","),
+    ),
   ].join("\n");
   downloadBlob(filename, "text/csv", csv);
 }
@@ -703,7 +852,12 @@ function csvCell(value: unknown) {
 }
 
 function safeFilename(value: string) {
-  return value.trim().replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "llm-run";
+  return (
+    value
+      .trim()
+      .replace(/[^A-Za-z0-9._-]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "llm-run"
+  );
 }
 
 function downloadBlob(filename: string, type: string, content: string) {
