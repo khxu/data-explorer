@@ -223,7 +223,7 @@ pub fn get_standalone_sql(
     drop(conn);
     for (name, path, paths, format) in sources {
         let file_paths = deserialize_file_paths(path, paths)?;
-        duckdb.register_source(&name, &file_paths, &format)?;
+        let _ = duckdb.register_source(&name, &file_paths, &format);
     }
     duckdb.inline_sources(&sql)
 }

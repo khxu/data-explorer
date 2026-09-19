@@ -96,13 +96,18 @@ export function AiSqlAssistant({
   const activeRequestIdRef = useRef<string | null>(null);
 
   const selectedDataSources = useMemo(
-    () => dataSources.filter((source) => selectedDataSourceIds.includes(source.id)),
+    () =>
+      dataSources.filter(
+        (source) => source.available && selectedDataSourceIds.includes(source.id)
+      ),
     [dataSources, selectedDataSourceIds]
   );
 
   useEffect(() => {
     setSelectedDataSourceIds((previousIds) => {
-      const availableIds = new Set(dataSources.map((source) => source.id));
+      const availableIds = new Set(
+        dataSources.filter((source) => source.available).map((source) => source.id)
+      );
       return previousIds.filter((id) => availableIds.has(id));
     });
   }, [dataSources]);
@@ -297,8 +302,8 @@ export function AiSqlAssistant({
         <div className="space-y-2 rounded-md border bg-background p-2">
           <div className="flex items-center justify-between gap-2">
             <div className="text-xs text-muted-foreground">
-              Context: {selectedDataSources.length} of {dataSources.length} table
-              {dataSources.length === 1 ? "" : "s"}
+              Context: {selectedDataSources.length} of {dataSources.filter((source) => source.available).length} available table
+              {dataSources.filter((source) => source.available).length === 1 ? "" : "s"}
             </div>
             <div className="flex gap-1">
               <Button
@@ -306,7 +311,13 @@ export function AiSqlAssistant({
                 size="sm"
                 variant="ghost"
                 className="h-6 px-2 text-xs"
-                onClick={() => setSelectedDataSourceIds(dataSources.map((source) => source.id))}
+                onClick={() =>
+                  setSelectedDataSourceIds(
+                    dataSources
+                      .filter((source) => source.available)
+                      .map((source) => source.id)
+                  )
+                }
                 disabled={drafting || dataSources.length === 0}
               >
                 All
@@ -333,7 +344,7 @@ export function AiSqlAssistant({
                   type="checkbox"
                   className="size-3.5 accent-primary"
                   checked={selectedDataSourceIds.includes(source.id)}
-                  disabled={drafting}
+                  disabled={drafting || !source.available}
                   onChange={(event) => {
                     setSelectedDataSourceIds((previousIds) =>
                       event.target.checked
@@ -346,6 +357,9 @@ export function AiSqlAssistant({
                   {source.name}
                 </span>
                 <span className="text-muted-foreground">{source.file_format}</span>
+                {!source.available && (
+                  <span className="text-amber-600">unavailable</span>
+                )}
               </label>
             ))}
             {dataSources.length === 0 && (

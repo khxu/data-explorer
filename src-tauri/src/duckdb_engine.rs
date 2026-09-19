@@ -115,8 +115,17 @@ impl DuckDbEngine {
         file_paths: &[String],
         file_format: &str,
     ) -> Result<(), AppError> {
-        // Validate the format early
-        Self::read_fn_for(file_paths, file_format)?;
+        // A failed refresh must not leave a stale source in the query registry.
+        if let Err(error) = Self::read_fn_for(file_paths, file_format) {
+            self.sources.lock().unwrap().remove(name);
+            return Err(error);
+        }
+        for file_path in file_paths {
+            if !std::path::Path::new(file_path).is_file() {
+                self.sources.lock().unwrap().remove(name);
+                return Err(AppError::FileNotFound(file_path.clone()));
+            }
+        }
 
         self.sources.lock().unwrap().insert(
             name.to_string(),
@@ -759,6 +768,43 @@ mod tests {
     }
 
     #[test]
+    fn missing_source_is_evicted_without_affecting_healthy_sources() {
+        let engine = DuckDbEngine::new().unwrap();
+        let healthy = std::env::temp_dir().join(format!(
+            "data_explorer_healthy_source_{}.csv",
+            uuid::Uuid::new_v4().simple()
+        ));
+        std::fs::write(&healthy, "id\n1\n").unwrap();
+
+        let healthy_path = healthy.to_string_lossy().into_owned();
+        engine
+            .register_source("healthy_source", &[healthy_path], "csv")
+            .unwrap();
+
+        let missing_path = std::env::temp_dir()
+            .join(format!("data_explorer_missing_source_{}.csv", uuid::Uuid::new_v4().simple()))
+            .to_string_lossy()
+            .into_owned();
+        let error = engine
+            .register_source("missing_source", &[missing_path], "csv")
+            .unwrap_err();
+
+        assert!(error.to_string().starts_with("File not found:"));
+        assert!(!engine
+            .sources
+            .lock()
+            .unwrap()
+            .contains_key("missing_source"));
+
+        let result = engine
+            .query_rows("SELECT id FROM healthy_source", None)
+            .unwrap();
+        assert_eq!(result.rows, vec![vec![serde_json::json!(1)]]);
+
+        std::fs::remove_file(healthy).unwrap();
+    }
+
+    #[test]
     fn registered_source_reads_multiple_parquet_files_as_one_table() {
         let engine = DuckDbEngine::new().unwrap();
         let source_prefix = std::env::temp_dir().join(format!(
@@ -847,17 +893,29 @@ mod tests {
     #[test]
     fn inline_sources_aliases_table_functions_in_relations_only() {
         let engine = DuckDbEngine::new().unwrap();
+        let policy_keywords = std::env::temp_dir().join(format!(
+            "data_explorer_policy_keywords_{}.csv",
+            uuid::Uuid::new_v4().simple()
+        ));
+        let searchable_bill = std::env::temp_dir().join(format!(
+            "data_explorer_searchable_bill_{}.parquet",
+            uuid::Uuid::new_v4().simple()
+        ));
+        std::fs::write(&policy_keywords, "").unwrap();
+        std::fs::write(&searchable_bill, "").unwrap();
+        let policy_keywords_path = policy_keywords.to_string_lossy().into_owned();
+        let searchable_bill_path = searchable_bill.to_string_lossy().into_owned();
         engine
             .register_source(
                 "github_policy_keywords",
-                &["/tmp/policy-keywords.csv".to_string()],
+                std::slice::from_ref(&policy_keywords_path),
                 "csv",
             )
             .unwrap();
         engine
             .register_source(
                 "searchablebill",
-                &["/tmp/searchablebill.parquet".to_string()],
+                std::slice::from_ref(&searchable_bill_path),
                 "parquet",
             )
             .unwrap();
@@ -873,21 +931,35 @@ JOIN policy_keywords ON LOWER(searchablebill.raw_text) LIKE policy_keywords.keyw
         let standalone = engine.inline_sources(sql).unwrap();
 
         assert!(standalone
-            .contains("FROM read_csv('/tmp/policy-keywords.csv') AS github_policy_keywords"));
+            .contains(&format!(
+                "FROM read_csv('{}') AS github_policy_keywords",
+                policy_keywords_path
+            )));
         assert!(standalone
-            .contains("FROM read_parquet('/tmp/searchablebill.parquet') AS searchablebill"));
+            .contains(&format!(
+                "FROM read_parquet('{}') AS searchablebill",
+                searchable_bill_path
+            )));
         assert!(standalone.contains("JOIN policy_keywords ON"));
         assert!(standalone.contains("searchablebill.raw_text[:140]"));
         assert!(!standalone.contains("read_parquet('/tmp/searchablebill.parquet').raw_text"));
+        std::fs::remove_file(policy_keywords).unwrap();
+        std::fs::remove_file(searchable_bill).unwrap();
     }
 
     #[test]
     fn inline_sources_preserves_explicit_aliases() {
         let engine = DuckDbEngine::new().unwrap();
+        let searchable_bill = std::env::temp_dir().join(format!(
+            "data_explorer_searchable_bill_alias_{}.parquet",
+            uuid::Uuid::new_v4().simple()
+        ));
+        std::fs::write(&searchable_bill, "").unwrap();
+        let searchable_bill_path = searchable_bill.to_string_lossy().into_owned();
         engine
             .register_source(
                 "searchablebill",
-                &["/tmp/searchablebill.parquet".to_string()],
+                std::slice::from_ref(&searchable_bill_path),
                 "parquet",
             )
             .unwrap();
@@ -900,7 +972,11 @@ JOIN policy_keywords ON LOWER(searchablebill.raw_text) LIKE policy_keywords.keyw
 
         assert_eq!(
             standalone,
-            "SELECT sb.raw_text FROM read_parquet('/tmp/searchablebill.parquet') AS sb WHERE sb.raw_text IS NOT NULL"
+            format!(
+                "SELECT sb.raw_text FROM read_parquet('{}') AS sb WHERE sb.raw_text IS NOT NULL",
+                searchable_bill_path
+            )
         );
+        std::fs::remove_file(searchable_bill).unwrap();
     }
 }

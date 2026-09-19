@@ -277,7 +277,13 @@ export function LlmRunsPanel() {
               >
                 <option value="">Choose</option>
                 {dataSources.map((source) => (
-                  <option key={source.id} value={source.id}>{source.name}</option>
+                  <option
+                    key={source.id}
+                    value={source.id}
+                    disabled={!source.available}
+                  >
+                    {source.name}{source.available ? "" : " (unavailable)"}
+                  </option>
                 ))}
               </select>
             </div>
