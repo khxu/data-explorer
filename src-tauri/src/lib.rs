@@ -35,7 +35,7 @@ pub fn run() {
             let duckdb = DuckDbEngine::new().expect("failed to initialize DuckDB engine");
 
             {
-                let conn = database.conn.lock().unwrap();
+                let conn = database.lock_connection()?;
                 let _ = conn.execute(
                     "UPDATE llm_runs SET status = 'paused', requested_action = NULL WHERE status = 'running'",
                     [],
@@ -44,7 +44,7 @@ pub fn run() {
 
             // Re-register all existing data sources into DuckDB on startup
             {
-                let conn = database.conn.lock().unwrap();
+                let conn = database.lock_connection()?;
                 let mut stmt = conn
                     .prepare("SELECT name, file_path, file_paths, file_format FROM data_sources")
                     .unwrap();

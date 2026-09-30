@@ -257,7 +257,7 @@ pub fn get_ai_assist_history(
 ) -> Result<Vec<AiAssistHistoryEntry>, AppError> {
     let limit = limit.unwrap_or(50);
     let offset = offset.unwrap_or(0);
-    let conn = db.conn.lock().unwrap();
+    let conn = db.lock_connection()?;
     let mut stmt = conn.prepare(
         "SELECT id, prompt_text, generated_sql, requested_model, model_used, model_name, token_usage, created_at
          FROM ai_assist_history ORDER BY created_at DESC LIMIT ?1 OFFSET ?2",
@@ -282,7 +282,7 @@ pub fn clear_ai_assist_history(
     db: State<'_, Arc<Database>>,
     before: Option<String>,
 ) -> Result<u64, AppError> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.lock_connection()?;
     let affected = if let Some(before_date) = before {
         conn.execute(
             "DELETE FROM ai_assist_history WHERE created_at < ?1",
@@ -304,7 +304,7 @@ fn save_ai_assist_history(
     token_usage: Option<&AiTokenUsage>,
 ) -> Result<(), AppError> {
     let token_usage = token_usage.map(serde_json::to_string).transpose()?;
-    let conn = db.conn.lock().unwrap();
+    let conn = db.lock_connection()?;
     conn.execute(
         "INSERT INTO ai_assist_history (id, prompt_text, generated_sql, requested_model, model_used, model_name, token_usage)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
@@ -571,7 +571,7 @@ fn build_ai_context(
     duckdb: &DuckDbEngine,
     data_source_ids: Option<Vec<String>>,
 ) -> Result<Vec<AiDataSourceContext>, AppError> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.lock_connection()?;
     let sources = if let Some(ids) = data_source_ids {
         if ids.is_empty() {
             return Ok(vec![]);

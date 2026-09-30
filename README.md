@@ -206,6 +206,8 @@ After running a query, you can save the results to a new file.
 
 Every query you run is logged with its SQL, status, timing, and a small result sample. AI Assist drafts are logged separately with the prompt, generated SQL, model details, and token usage. LLM Runs are tracked from the **LLM Runs** tab with their own experiment list, run history, status, and stored per-row/per-model results.
 
+Query history samples contain at most 20 rows. Long string values are shortened to a complete UTF-8 prefix of at most 200 bytes, followed by an ellipsis; full query results and exports remain unchanged. If an internal failure poisons the SQLite connection lock, affected operations return an error instead of attempting to reuse the connection. Restart Data Explorer before retrying.
+
 1. Click the **History** tab
 2. Switch between **Queries** and **AI Assist**
 3. Browse past queries — successful ones show row count and execution time, failed ones show the error message

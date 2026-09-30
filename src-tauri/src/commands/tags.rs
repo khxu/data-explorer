@@ -19,7 +19,7 @@ pub fn create_tag(
     color: Option<String>,
 ) -> Result<Tag, AppError> {
     let id = uuid::Uuid::new_v4().to_string();
-    let conn = db.conn.lock().unwrap();
+    let conn = db.lock_connection()?;
     conn.execute(
         "INSERT INTO tags (id, name, color) VALUES (?1, ?2, ?3)",
         rusqlite::params![id, name, color],
@@ -34,14 +34,14 @@ pub fn create_tag(
 
 #[tauri::command]
 pub fn delete_tag(db: State<std::sync::Arc<Database>>, id: String) -> Result<(), AppError> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.lock_connection()?;
     conn.execute("DELETE FROM tags WHERE id = ?1", rusqlite::params![id])?;
     Ok(())
 }
 
 #[tauri::command]
 pub fn list_tags(db: State<std::sync::Arc<Database>>) -> Result<Vec<Tag>, AppError> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.lock_connection()?;
     let mut stmt = conn.prepare("SELECT id, name, color, created_at FROM tags ORDER BY name")?;
     let rows = stmt.query_map([], |row| {
         Ok(Tag {
@@ -60,7 +60,7 @@ pub fn assign_tags(
     data_source_id: String,
     tag_ids: Vec<String>,
 ) -> Result<(), AppError> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.lock_connection()?;
     for tag_id in &tag_ids {
         conn.execute(
             "INSERT OR IGNORE INTO data_source_tags (data_source_id, tag_id) VALUES (?1, ?2)",
@@ -76,7 +76,7 @@ pub fn remove_tags(
     data_source_id: String,
     tag_ids: Vec<String>,
 ) -> Result<(), AppError> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.lock_connection()?;
     for tag_id in &tag_ids {
         conn.execute(
             "DELETE FROM data_source_tags WHERE data_source_id = ?1 AND tag_id = ?2",
