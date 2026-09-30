@@ -173,7 +173,7 @@ struct OpenAiBatchChunk {
 
 #[tauri::command]
 pub fn list_llm_experiments(db: State<'_, Arc<Database>>) -> Result<Vec<LlmExperiment>, AppError> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.lock_connection()?;
     let mut stmt = conn.prepare(
         "SELECT id, name, input_source_type, data_source_id, sql_text, selected_columns,
                 system_prompt, user_prompt, models, created_at, updated_at
@@ -192,7 +192,7 @@ pub fn save_llm_experiment(
     let id = draft.id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
     let selected_columns = serde_json::to_string(&draft.selected_columns)?;
     let models = serde_json::to_string(&draft.models)?;
-    let conn = db.conn.lock().unwrap();
+    let conn = db.lock_connection()?;
     conn.execute(
         "INSERT INTO llm_experiments
             (id, name, input_source_type, data_source_id, sql_text, selected_columns, system_prompt, user_prompt, models)
@@ -224,7 +224,7 @@ pub fn save_llm_experiment(
 
 #[tauri::command]
 pub fn delete_llm_experiment(db: State<'_, Arc<Database>>, id: String) -> Result<(), AppError> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.lock_connection()?;
     conn.execute(
         "DELETE FROM llm_experiments WHERE id = ?1",
         rusqlite::params![id],
@@ -325,7 +325,7 @@ pub fn export_openai_batch_jsonl(
 
 #[tauri::command]
 pub fn list_llm_runs(db: State<'_, Arc<Database>>) -> Result<Vec<LlmRun>, AppError> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.lock_connection()?;
     let mut stmt = conn.prepare(
         "SELECT r.id, r.experiment_id, e.name, r.status, r.total_count, r.completed_count,
                 r.failed_count, r.requested_action, r.started_at, r.completed_at
@@ -343,7 +343,7 @@ pub fn get_llm_run_results(
     db: State<'_, Arc<Database>>,
     run_id: String,
 ) -> Result<Vec<LlmRunResult>, AppError> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.lock_connection()?;
     list_run_results(&conn, &run_id)
 }
 
@@ -423,7 +423,7 @@ async fn execute_run(
     retry_failed: bool,
 ) -> Result<LlmRun, AppError> {
     let experiment = {
-        let conn = db.conn.lock().unwrap();
+        let conn = db.lock_connection()?;
         load_experiment(&conn, &experiment_id)?
     };
     if experiment.models.is_empty() {
@@ -467,7 +467,7 @@ async fn execute_run(
         (Err(err), _) => Err(err),
         (Ok(_), Err(err)) => Err(err),
         (Ok(()), Ok(())) => {
-            let conn = db.conn.lock().unwrap();
+            let conn = db.lock_connection()?;
             load_run(&conn, &run_id)
         }
     }
@@ -531,7 +531,7 @@ async fn execute_run_with_client(
             }
             update_run_status_counts(db, run_id, "running", None)?;
             let run = {
-                let conn = db.conn.lock().unwrap();
+                let conn = db.lock_connection()?;
                 load_run(&conn, run_id)?
             };
             emit_progress_with_counts(
@@ -718,7 +718,7 @@ fn materialize_preview(
             let id = data_source_id.ok_or_else(|| {
                 AppError::General("Choose a data source for this LLM experiment.".to_string())
             })?;
-            let conn = db.conn.lock().unwrap();
+            let conn = db.lock_connection()?;
             let (file_path, file_paths, file_format): (String, Option<String>, String) = conn
                 .query_row(
                     "SELECT file_path, file_paths, file_format FROM data_sources WHERE id = ?1",
@@ -1171,7 +1171,7 @@ fn initialize_run(
     total_count: i64,
     retry_failed: bool,
 ) -> Result<(), AppError> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.lock_connection()?;
     if retry_failed {
         conn.execute(
             "UPDATE llm_runs SET status = 'running', requested_action = NULL, total_count = ?2, completed_at = NULL WHERE id = ?1",
@@ -1189,7 +1189,7 @@ fn initialize_run(
 }
 
 fn request_run_action(db: &Database, run_id: &str, action: &str) -> Result<(), AppError> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.lock_connection()?;
     conn.execute(
         "UPDATE llm_runs SET requested_action = ?2 WHERE id = ?1 AND status = 'running'",
         rusqlite::params![run_id, action],
@@ -1204,7 +1204,7 @@ fn handle_requested_action(
     experiment_id: &str,
 ) -> Result<bool, AppError> {
     let action = {
-        let conn = db.conn.lock().unwrap();
+        let conn = db.lock_connection()?;
         conn.query_row(
             "SELECT requested_action FROM llm_runs WHERE id = ?1",
             rusqlite::params![run_id],
@@ -1250,7 +1250,7 @@ fn existing_result(
     row_index: i64,
     model: &str,
 ) -> Result<Option<(String, String)>, AppError> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.lock_connection()?;
     let mut stmt = conn.prepare(
         "SELECT id, status FROM llm_run_results WHERE run_id = ?1 AND row_index = ?2 AND model = ?3",
     )?;
@@ -1283,7 +1283,7 @@ fn upsert_running_result(
     input_user: &str,
 ) -> Result<String, AppError> {
     let source_row = serde_json::to_string(row)?;
-    let conn = db.conn.lock().unwrap();
+    let conn = db.lock_connection()?;
     if let Some(id) = existing_id {
         conn.execute(
             "UPDATE llm_run_results
@@ -1322,7 +1322,7 @@ fn update_result_success(
     latency_ms: i64,
 ) -> Result<(), AppError> {
     let token_usage = token_usage.map(serde_json::to_string).transpose()?;
-    let conn = db.conn.lock().unwrap();
+    let conn = db.lock_connection()?;
     conn.execute(
         "UPDATE llm_run_results
          SET status = 'success', output = ?2, error = NULL, token_usage = ?3,
@@ -1339,7 +1339,7 @@ fn update_result_error(
     error: &str,
     latency_ms: i64,
 ) -> Result<(), AppError> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.lock_connection()?;
     conn.execute(
         "UPDATE llm_run_results
          SET status = 'error', error = ?2, latency_ms = ?3, updated_at = datetime('now')
@@ -1355,7 +1355,7 @@ fn update_run_status_counts(
     status: &str,
     completed_at_expr: Option<&str>,
 ) -> Result<(), AppError> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.lock_connection()?;
     let completed_count: i64 = conn.query_row(
         "SELECT COUNT(*) FROM llm_run_results WHERE run_id = ?1 AND status IN ('success', 'error')",
         rusqlite::params![run_id],
@@ -1382,7 +1382,7 @@ fn update_run_status_counts(
 }
 
 fn run_experiment_id(db: &Database, run_id: &str) -> Result<String, AppError> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.lock_connection()?;
     Ok(conn.query_row(
         "SELECT experiment_id FROM llm_runs WHERE id = ?1",
         rusqlite::params![run_id],

@@ -1,6 +1,6 @@
 use rusqlite::Connection;
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Mutex, MutexGuard};
 
 use crate::error::AppError;
 
@@ -8,7 +8,65 @@ pub struct Database {
     pub conn: Mutex<Connection>,
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn healthy_connection_remains_usable() {
+        let db = Database {
+            conn: Mutex::new(Connection::open_in_memory().unwrap()),
+        };
+        for _ in 0..2 {
+            let value: i64 = db
+                .lock_connection()
+                .unwrap()
+                .query_row("SELECT 1", [], |row| row.get(0))
+                .unwrap();
+            assert_eq!(value, 1);
+        }
+    }
+
+    #[test]
+    fn poisoned_connection_returns_a_serializable_error_without_recovery() {
+        let db = Database {
+            conn: Mutex::new(Connection::open_in_memory().unwrap()),
+        };
+        std::thread::scope(|scope| {
+            assert!(scope
+                .spawn(|| {
+                    let _conn = db.lock_connection().unwrap();
+                    panic!("simulated SQLite lock holder failure");
+                })
+                .join()
+                .is_err());
+        });
+
+        for _ in 0..2 {
+            let error = db.lock_connection().unwrap_err();
+            assert!(matches!(error, AppError::General(_)));
+            let message = error.to_string();
+            assert!(message.contains("SQLite connection lock is poisoned"));
+            assert!(message.contains("Restart Data Explorer"));
+            assert_eq!(
+                serde_json::from_str::<String>(&serde_json::to_string(&error).unwrap()).unwrap(),
+                message
+            );
+            assert!(db.conn.is_poisoned());
+        }
+    }
+}
+
 impl Database {
+    pub fn lock_connection(&self) -> Result<MutexGuard<'_, Connection>, AppError> {
+        self.conn.lock().map_err(|_| {
+            AppError::General(
+                "SQLite connection lock is poisoned after an internal failure. Restart Data Explorer before retrying."
+                    .to_string(),
+            )
+        })
+    }
+
     pub fn new(app_dir: PathBuf) -> Result<Self, AppError> {
         std::fs::create_dir_all(&app_dir)?;
         let db_path = app_dir.join("data_explorer.db");
@@ -22,7 +80,7 @@ impl Database {
     }
 
     fn run_migrations(&self) -> Result<(), AppError> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_connection()?;
         conn.execute_batch(
             "
             CREATE TABLE IF NOT EXISTS data_sources (

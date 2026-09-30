@@ -100,7 +100,7 @@ pub fn register_data_source(
     let id = uuid::Uuid::new_v4().to_string();
     let file_path = file_paths[0].clone();
     let serialized_file_paths = serde_json::to_string(&file_paths)?;
-    let conn = db.conn.lock().unwrap();
+    let conn = db.lock_connection()?;
     conn.execute(
         "INSERT INTO data_sources (id, name, file_path, file_paths, file_format) VALUES (?1, ?2, ?3, ?4, ?5)",
         rusqlite::params![id, name, file_path, serialized_file_paths, file_format],
@@ -129,7 +129,7 @@ pub fn remove_data_source(
     duckdb: State<std::sync::Arc<DuckDbEngine>>,
     id: String,
 ) -> Result<(), AppError> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.lock_connection()?;
     // Get name before deleting so we can unregister the DuckDB view
     let name: String = conn.query_row(
         "SELECT name FROM data_sources WHERE id = ?1",
@@ -151,7 +151,7 @@ pub fn refresh_data_source(
     duckdb: State<std::sync::Arc<DuckDbEngine>>,
     id: String,
 ) -> Result<(), AppError> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.lock_connection()?;
     let (name, file_path, file_paths, file_format): (String, String, Option<String>, String) = conn
         .query_row(
             "SELECT name, file_path, file_paths, file_format FROM data_sources WHERE id = ?1",
@@ -169,7 +169,7 @@ pub fn refresh_all_data_sources(
     db: State<std::sync::Arc<Database>>,
     duckdb: State<std::sync::Arc<DuckDbEngine>>,
 ) -> Result<(), AppError> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.lock_connection()?;
     let mut stmt =
         conn.prepare("SELECT name, file_path, file_paths, file_format FROM data_sources")?;
     let sources: Vec<(String, String, Option<String>, String)> = stmt
@@ -192,7 +192,7 @@ pub fn get_data_source_schema(
     duckdb: State<std::sync::Arc<DuckDbEngine>>,
     id: String,
 ) -> Result<DataSourceSchema, AppError> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.lock_connection()?;
     let (name, file_path, file_paths, file_format): (String, String, Option<String>, String) = conn
         .query_row(
             "SELECT name, file_path, file_paths, file_format FROM data_sources WHERE id = ?1",
@@ -220,7 +220,7 @@ pub fn list_data_sources(
     db: State<std::sync::Arc<Database>>,
     tag_ids: Option<Vec<String>>,
 ) -> Result<Vec<DataSource>, AppError> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.lock_connection()?;
 
     let mut sources: Vec<DataSource> = if let Some(ref tags) = tag_ids {
         if tags.is_empty() {

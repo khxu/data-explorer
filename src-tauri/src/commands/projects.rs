@@ -23,7 +23,7 @@ pub fn create_project(
 ) -> Result<Project, AppError> {
     let id = uuid::Uuid::new_v4().to_string();
     let tag_json = serde_json::to_string(&tag_filter)?;
-    let conn = db.conn.lock().unwrap();
+    let conn = db.lock_connection()?;
     conn.execute(
         "INSERT INTO projects (id, name, description, tag_filter) VALUES (?1, ?2, ?3, ?4)",
         rusqlite::params![id, name, description, tag_json],
@@ -47,7 +47,7 @@ pub fn update_project(
     tag_filter: Vec<String>,
 ) -> Result<(), AppError> {
     let tag_json = serde_json::to_string(&tag_filter)?;
-    let conn = db.conn.lock().unwrap();
+    let conn = db.lock_connection()?;
     conn.execute(
         "UPDATE projects SET name = ?1, description = ?2, tag_filter = ?3, updated_at = datetime('now') WHERE id = ?4",
         rusqlite::params![name, description, tag_json, id],
@@ -57,14 +57,14 @@ pub fn update_project(
 
 #[tauri::command]
 pub fn delete_project(db: State<std::sync::Arc<Database>>, id: String) -> Result<(), AppError> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.lock_connection()?;
     conn.execute("DELETE FROM projects WHERE id = ?1", rusqlite::params![id])?;
     Ok(())
 }
 
 #[tauri::command]
 pub fn list_projects(db: State<std::sync::Arc<Database>>) -> Result<Vec<Project>, AppError> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.lock_connection()?;
     let mut stmt =
         conn.prepare("SELECT id, name, description, tag_filter, created_at, updated_at FROM projects ORDER BY name")?;
     let rows = stmt.query_map([], |row| {

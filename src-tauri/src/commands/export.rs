@@ -19,7 +19,7 @@ pub(crate) fn validate_export_destination(
         )));
     }
 
-    let conn = db.conn.lock().unwrap();
+    let conn = db.lock_connection()?;
     let mut stmt = conn.prepare("SELECT file_path, file_paths FROM data_sources")?;
     let sources: Vec<(String, Option<String>)> = stmt
         .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
