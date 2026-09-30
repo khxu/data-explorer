@@ -13,6 +13,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useAppState } from "@/hooks/useAppState";
+import { quoteSqlIdentifier } from "@/lib/utils";
 import {
   removeDataSource,
   deleteProject,
@@ -99,7 +100,7 @@ export function Sidebar() {
   }
 
   function handleSourceClick(name: string) {
-    setLastSql(`SELECT * FROM ${name} LIMIT 100`);
+    setLastSql(`SELECT * FROM ${quoteSqlIdentifier(name)} LIMIT 100`);
   }
 
   return (

@@ -188,7 +188,7 @@ pub async fn draft_sql_query(
             .with_system_message(
                 SystemMessageConfig::new()
                     .with_mode("replace")
-                    .with_content("You are a SQL assistant for a DuckDB data exploration app. Draft a single read-only DuckDB SQL query. Use only the table names and columns provided by the app context. Return SQL only, with no markdown fences, explanations, or commentary."),
+                    .with_content("You are a SQL assistant for a DuckDB data exploration app. Draft a single read-only DuckDB SQL query. Use only the table names and columns provided by the app context. Double-quote table and column identifiers, escaping embedded double quotes by doubling them. Return SQL only, with no markdown fences, explanations, or commentary."),
             );
         config.model = requested_model.clone();
         let prepared = client.prepare_session(config)?;

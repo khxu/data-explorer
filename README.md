@@ -61,6 +61,14 @@ If a registered file is deleted or moved outside Data Explorer, the source remai
 
 You have access to all of DuckDB's SQL capabilities — joins across tables, window functions, aggregations, CTEs, etc.
 
+Table names containing hyphens, spaces, or SQL keywords must be enclosed in double quotes, for example:
+
+```sql
+SELECT * FROM "dataset_2026-09-04" LIMIT 100;
+```
+
+Escape any double quote inside a name by doubling it (`"source""name"`). Clicking a data source in the sidebar quotes its name automatically.
+
 #### Multiple Query Tabs
 
 You can open multiple query tabs to run different queries side-by-side and compare results:

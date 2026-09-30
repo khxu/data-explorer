@@ -303,7 +303,11 @@ impl DuckDbEngine {
         let mut cte_parts: Vec<String> = Vec::new();
         for (name, info) in sources.iter() {
             let read_fn = Self::read_fn_for(&info.file_paths, &info.file_format)?;
-            cte_parts.push(format!("{} AS (SELECT * FROM {})", name, read_fn));
+            cte_parts.push(format!(
+                "{} AS (SELECT * FROM {})",
+                Self::quote_identifier(name),
+                read_fn
+            ));
         }
         let cte_block = cte_parts.join(", ");
 
@@ -765,6 +769,57 @@ mod tests {
         assert_eq!(columns.len(), 2);
         assert_eq!(columns[0].0, "id");
         assert_eq!(columns[1].0, "name");
+    }
+
+    #[test]
+    fn registered_source_names_are_quoted_in_queries() {
+        let engine = DuckDbEngine::new().unwrap();
+        let source = std::env::temp_dir().join(format!(
+            "data_explorer_quoted_source_{}.parquet",
+            uuid::Uuid::new_v4().simple()
+        ));
+        {
+            let conn = engine.conn.lock().unwrap();
+            conn.execute_batch(&format!(
+                "COPY (SELECT 1 AS id) TO '{}' (FORMAT PARQUET)",
+                source.to_string_lossy().replace('\'', "''")
+            ))
+            .unwrap();
+        }
+        let paths = vec![source.to_string_lossy().into_owned()];
+        let names = [
+            "jev_org_repos_2026-09-04",
+            "source with spaces",
+            "source\"name",
+            "select",
+            "2026_data",
+            "ordinary_source",
+        ];
+        for name in names {
+            engine.register_source(name, &paths, "parquet").unwrap();
+        }
+
+        let unrelated = engine.query_rows("SELECT 42 AS value", None).unwrap();
+        assert_eq!(unrelated.rows, vec![vec![serde_json::json!(42)]]);
+        let ordinary = engine
+            .query_rows("SELECT id FROM ordinary_source", None)
+            .unwrap();
+        assert_eq!(ordinary.rows, vec![vec![serde_json::json!(1)]]);
+
+        for name in names {
+            let quoted_name = DuckDbEngine::quote_identifier(name);
+            for sql in [
+                format!("SELECT id FROM {}", quoted_name),
+                format!(
+                    "WITH selected AS (SELECT id FROM {}) SELECT id FROM selected;",
+                    quoted_name
+                ),
+            ] {
+                let result = engine.query_rows(&sql, None).unwrap();
+                assert_eq!(result.rows, vec![vec![serde_json::json!(1)]]);
+            }
+        }
+        std::fs::remove_file(source).unwrap();
     }
 
     #[test]
